@@ -12,80 +12,74 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(fileUpload());
 app.use(express.static('public'));
+app.use('/snapshots', express.static(path.join(__dirname, 'data', 'snapshots'))); // Serve snapshots statically
 
 // Data directory
 const DATA_DIR = path.join(__dirname, 'data');
-const SIGNATURES_DIR = path.join(DATA_DIR, 'signatures');
-const RECORDS_FILE = path.join(DATA_DIR, 'records.json');
+const CONTRACTS_DIR = path.join(DATA_DIR, 'contracts');
+const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
 
 // Ensure directories exist
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
-if (!fs.existsSync(SIGNATURES_DIR)) {
-  fs.mkdirSync(SIGNATURES_DIR, { recursive: true });
+if (!fs.existsSync(CONTRACTS_DIR)) {
+  fs.mkdirSync(CONTRACTS_DIR, { recursive: true });
+}
+if (!fs.existsSync(SNAPSHOTS_DIR)) {
+  fs.mkdirSync(SNAPSHOTS_DIR, { recursive: true });
 }
 
-// Initialize records file
-if (!fs.existsSync(RECORDS_FILE)) {
-  fs.writeFileSync(RECORDS_FILE, JSON.stringify([], null, 2));
-}
-
-// Current working contract file
-const CURRENT_CONTRACT_FILE = path.join(DATA_DIR, 'current.json');
-if (!fs.existsSync(CURRENT_CONTRACT_FILE)) {
-  fs.writeFileSync(CURRENT_CONTRACT_FILE, JSON.stringify({}));
-}
-
-/**
- * 讀取所有記錄
- */
-function getRecords() {
+// === Legacy migration: move old current.json / records.json into contracts folder ===
+const OLD_CURRENT = path.join(DATA_DIR, 'current.json');
+if (fs.existsSync(OLD_CURRENT)) {
   try {
-    const data = fs.readFileSync(RECORDS_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (err) {
-    return [];
+    const oldData = JSON.parse(fs.readFileSync(OLD_CURRENT, 'utf-8'));
+    if (oldData && Object.keys(oldData).length > 0) {
+      const donor = oldData.giverName || '未知送養人';
+      const adopter = oldData.adopterName || '未知認養人';
+      const ts = oldData.timestamp ? oldData.timestamp.slice(0, 10).replace(/-/g, '') : new Date().toISOString().slice(0, 10).replace(/-/g, '');
+      const folderName = `${donor}_${adopter}_${ts}`;
+      const contractDir = path.join(CONTRACTS_DIR, folderName);
+      if (!fs.existsSync(contractDir)) {
+        fs.mkdirSync(contractDir, { recursive: true });
+        fs.writeFileSync(path.join(contractDir, 'contract.json'), JSON.stringify(oldData, null, 2));
+        console.log(`📦 已遷移舊合約到 ${folderName}`);
+      }
+    }
+    // Keep old file as backup, rename it
+    fs.renameSync(OLD_CURRENT, path.join(DATA_DIR, 'current.json.bak'));
+  } catch (e) {
+    console.error('遷移舊合約失敗', e);
   }
 }
 
 /**
- * 保存記錄
+ * Generate a contract folder name from form data
+ * Format: {送養人}_{認養人}_{YYYYMMDD}
  */
-function saveRecords(records) {
-  fs.writeFileSync(RECORDS_FILE, JSON.stringify(records, null, 2));
+function generateContractFolderName(formData) {
+  const donor = (formData.giverName || '').trim() || '未知送養人';
+  const adopter = (formData.adopterName || '').trim() || '未知認養人';
+  const now = new Date();
+  const ts = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`;
+  // Sanitize folder name (remove illegal characters for file system)
+  const safeDonor = donor.replace(/[\\/:*?"<>|]/g, '_');
+  const safeAdopter = adopter.replace(/[\\/:*?"<>|]/g, '_');
+  return `${safeDonor}_${safeAdopter}_${ts}`;
 }
 
 /**
- * 保存簽名圖片
+ * Save signature to a specific contract folder
  */
-function saveSignature(base64Data, filename) {
+function saveSignatureToFolder(contractDir, base64Data, filename) {
   const base64String = base64Data.replace(/^data:image\/\w+;base64,/, '');
-  const filepath = path.join(SIGNATURES_DIR, filename);
+  const filepath = path.join(contractDir, filename);
   fs.writeFileSync(filepath, Buffer.from(base64String, 'base64'));
-  return `/signatures/${filename}`;
+  return filename;
 }
 
-/**
- * 讀取當前工作中的合約
- */
-function getCurrentContract() {
-  try {
-    const data = fs.readFileSync(CURRENT_CONTRACT_FILE, 'utf-8');
-    return JSON.parse(data);
-  } catch (err) {
-    return {};
-  }
-}
-
-/**
- * 保存當前工作中的合約
- */
-function saveCurrentContract(contractData) {
-  fs.writeFileSync(CURRENT_CONTRACT_FILE, JSON.stringify(contractData, null, 2));
-}
-
-// Routes
+// ================== API Routes ==================
 
 /**
  * GET / - 主頁面
@@ -95,38 +89,92 @@ app.get('/', (req, res) => {
 });
 
 /**
- * POST /api/save - 保存領養簽署紀錄
+ * GET /api/contracts - 列出所有合約資料夾
  */
-app.post('/api/save', (req, res) => {
+app.get('/api/contracts', (req, res) => {
   try {
-    const { donor, adopter, donorId, adopterId, notes, remarks, donorSignature, adopterSignature } = req.body;
+    if (!fs.existsSync(CONTRACTS_DIR)) {
+      return res.json({ success: true, data: [] });
+    }
+    const folders = fs.readdirSync(CONTRACTS_DIR).filter(name => {
+      const fullPath = path.join(CONTRACTS_DIR, name);
+      return fs.statSync(fullPath).isDirectory();
+    });
 
-    const records = getRecords();
-    const timestamp = new Date().toISOString();
-    const recordId = `record_${Date.now()}`;
+    // Return folder info with metadata, filter out soft-deleted (valid: false)
+    const contracts = folders.map(folder => {
+      const contractFile = path.join(CONTRACTS_DIR, folder, 'contract.json');
+      let meta = {};
+      let valid = true;
+      if (fs.existsSync(contractFile)) {
+        try {
+          const raw = JSON.parse(fs.readFileSync(contractFile, 'utf-8'));
+          if (raw.valid === false) valid = false;
+          meta = {
+            giverName: raw.giverName || '',
+            adopterName: raw.adopterName || '',
+            contractType: raw.contractType || '送養合約',
+            adoptionDate: raw.adoptionDate || '',
+            timestamp: raw.timestamp || '',
+            isProtected: !!raw.isProtected,
+          };
+        } catch (e) { /* ignore */ }
+      }
+      return valid ? { folder, ...meta } : null;
+    }).filter(c => c !== null);
 
-    // 保存簽名圖片
-    const donorSigPath = donorSignature ? saveSignature(donorSignature, `${recordId}_donor.png`) : null;
-    const adopterSigPath = adopterSignature ? saveSignature(adopterSignature, `${recordId}_adopter.png`) : null;
+    // Sort by timestamp descending (newest first)
+    contracts.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
 
-    // 新建記錄
-    const newRecord = {
-      id: recordId,
-      timestamp,
-      donor,
-      adopter,
-      donorId,
-      adopterId,
-      notes,
-      remarks,
-      donorSignature: donorSigPath,
-      adopterSignature: adopterSigPath,
-    };
+    res.json({ success: true, data: contracts });
+  } catch (err) {
+    res.status(500).json({ success: false, message: '讀取合約列表失敗：' + err.message });
+  }
+});
 
-    records.push(newRecord);
-    saveRecords(records);
+/**
+ * GET /api/contracts/:folder - 讀取指定合約
+ */
+app.get('/api/contracts/:folder', (req, res) => {
+  try {
+    const folder = req.params.folder;
+    const contractFile = path.join(CONTRACTS_DIR, folder, 'contract.json');
+    if (!fs.existsSync(contractFile)) {
+      return res.status(404).json({ success: false, message: '合約不存在' });
+    }
+    const data = JSON.parse(fs.readFileSync(contractFile, 'utf-8'));
+    res.json({ success: true, data, folder });
+  } catch (err) {
+    res.status(500).json({ success: false, message: '讀取合約失敗：' + err.message });
+  }
+});
 
-    res.json({ success: true, id: recordId, message: '記錄保存成功' });
+/**
+ * PUT /api/contracts/:folder - 更新指定合約 (auto-save)
+ */
+app.put('/api/contracts/:folder', (req, res) => {
+  try {
+    const folder = req.params.folder;
+    const contractDir = path.join(CONTRACTS_DIR, folder);
+    if (!fs.existsSync(contractDir)) {
+      fs.mkdirSync(contractDir, { recursive: true });
+    }
+
+    const formData = req.body;
+
+    // Save signatures as separate files in the contract folder
+    if (formData.giverSignatureDataUrl) {
+      saveSignatureToFolder(contractDir, formData.giverSignatureDataUrl, 'signature_donor.png');
+    }
+    if (formData.adopterSignatureDataUrl) {
+      saveSignatureToFolder(contractDir, formData.adopterSignatureDataUrl, 'signature_adopter.png');
+    }
+
+    // Save the JSON (with signature data urls kept for reload)
+    formData.timestamp = new Date().toISOString();
+    fs.writeFileSync(path.join(contractDir, 'contract.json'), JSON.stringify(formData, null, 2));
+
+    res.json({ success: true, message: '合約已保存', folder });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, message: '保存失敗：' + err.message });
@@ -134,129 +182,168 @@ app.post('/api/save', (req, res) => {
 });
 
 /**
- * GET /api/records - 取得所有記錄
+ * POST /api/contracts - 建立新合約
  */
-app.get('/api/records', (req, res) => {
+app.post('/api/contracts', (req, res) => {
   try {
-    const records = getRecords();
-    res.json({ success: true, data: records });
-  } catch (err) {
-    res.status(500).json({ success: false, message: '讀取失敗：' + err.message });
-  }
-});
+    const formData = req.body || {};
+    const folderName = generateContractFolderName(formData);
+    const contractDir = path.join(CONTRACTS_DIR, folderName);
 
-/**
- * GET /api/current - 取得當前工作中的合約
- */
-app.get('/api/current', (req, res) => {
-  try {
-    const currentContract = getCurrentContract();
-    res.json({ success: true, data: currentContract });
-  } catch (err) {
-    res.status(500).json({ success: false, message: '讀取失敗：' + err.message });
-  }
-});
+    // If folder already exists, append a counter
+    let finalFolder = folderName;
+    let counter = 1;
+    while (fs.existsSync(path.join(CONTRACTS_DIR, finalFolder))) {
+      finalFolder = `${folderName}_${counter}`;
+      counter++;
+    }
 
-/**
- * PUT /api/current - 更新當前工作中的合約
- */
-app.put('/api/current', (req, res) => {
-  try {
-    const contractData = req.body;
-    saveCurrentContract(contractData);
-    res.json({ success: true, message: '合約已自動保存' });
+    const finalDir = path.join(CONTRACTS_DIR, finalFolder);
+    fs.mkdirSync(finalDir, { recursive: true });
+
+    // Save initial data
+    formData.timestamp = new Date().toISOString();
+    fs.writeFileSync(path.join(finalDir, 'contract.json'), JSON.stringify(formData, null, 2));
+
+    // Save signatures if present
+    if (formData.giverSignatureDataUrl) {
+      saveSignatureToFolder(finalDir, formData.giverSignatureDataUrl, 'signature_donor.png');
+    }
+    if (formData.adopterSignatureDataUrl) {
+      saveSignatureToFolder(finalDir, formData.adopterSignatureDataUrl, 'signature_adopter.png');
+    }
+
+    res.json({ success: true, message: '新合約已建立', folder: finalFolder });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, message: '保存失敗：' + err.message });
+    res.status(500).json({ success: false, message: '建立失敗：' + err.message });
   }
 });
 
 /**
- * GET /api/records/:id - 取得單筆記錄
+ * POST /api/contracts/:folder/rename - 重新命名合約資料夾（當姓名或日期改變時）
  */
-app.get('/api/records/:id', (req, res) => {
+app.post('/api/contracts/:folder/rename', (req, res) => {
   try {
-    const records = getRecords();
-    const record = records.find(r => r.id === req.params.id);
-    if (!record) {
-      return res.status(404).json({ success: false, message: '記錄不存在' });
+    const oldFolder = req.params.folder;
+    const formData = req.body;
+    const newFolder = generateContractFolderName(formData);
+
+    if (oldFolder === newFolder) {
+      return res.json({ success: true, folder: oldFolder, message: '名稱未變' });
     }
-    res.json({ success: true, data: record });
+
+    const oldPath = path.join(CONTRACTS_DIR, oldFolder);
+    let finalNewFolder = newFolder;
+    let counter = 1;
+    while (fs.existsSync(path.join(CONTRACTS_DIR, finalNewFolder)) && finalNewFolder !== oldFolder) {
+      finalNewFolder = `${newFolder}_${counter}`;
+      counter++;
+    }
+
+    if (finalNewFolder !== oldFolder) {
+      fs.renameSync(oldPath, path.join(CONTRACTS_DIR, finalNewFolder));
+    }
+
+    res.json({ success: true, folder: finalNewFolder, message: '資料夾已重新命名' });
   } catch (err) {
-    res.status(500).json({ success: false, message: '讀取失敗：' + err.message });
+    console.error(err);
+    res.status(500).json({ success: false, message: '重新命名失敗：' + err.message });
   }
 });
 
 /**
- * DELETE /api/records/:id - 刪除記錄
+ * DELETE /api/contracts/:folder - 軟刪除指定合約（標記 valid: false，不真正刪除檔案）
  */
-app.delete('/api/records/:id', (req, res) => {
+app.delete('/api/contracts/:folder', (req, res) => {
   try {
-    const records = getRecords();
-    const index = records.findIndex(r => r.id === req.params.id);
-    if (index === -1) {
-      return res.status(404).json({ success: false, message: '記錄不存在' });
-    }
-    
-    const deletedRecord = records.splice(index, 1)[0];
-    saveRecords(records);
-
-    // 刪除簽名檔案
-    if (deletedRecord.donorSignature) {
-      const donorPath = path.join(__dirname, 'public', deletedRecord.donorSignature);
-      if (fs.existsSync(donorPath)) fs.unlinkSync(donorPath);
-    }
-    if (deletedRecord.adopterSignature) {
-      const adopterPath = path.join(__dirname, 'public', deletedRecord.adopterSignature);
-      if (fs.existsSync(adopterPath)) fs.unlinkSync(adopterPath);
+    const folder = req.params.folder;
+    const contractDir = path.join(CONTRACTS_DIR, folder);
+    const contractFile = path.join(contractDir, 'contract.json');
+    if (!fs.existsSync(contractFile)) {
+      return res.status(404).json({ success: false, message: '合約不存在' });
     }
 
-    res.json({ success: true, message: '記錄已刪除' });
+    // Soft delete: mark valid = false in JSON
+    const data = JSON.parse(fs.readFileSync(contractFile, 'utf-8'));
+    data.valid = false;
+    data.deletedAt = new Date().toISOString();
+    fs.writeFileSync(contractFile, JSON.stringify(data, null, 2));
+
+    res.json({ success: true, message: '合約已標記為刪除（資料仍保留）' });
   } catch (err) {
     res.status(500).json({ success: false, message: '刪除失敗：' + err.message });
   }
 });
 
 /**
- * DELETE /api/records - 清空所有記錄
+ * POST /api/snapshots - 儲存合約截圖版本 (歷史紀錄)
  */
-app.delete('/api/records', (req, res) => {
+app.post('/api/snapshots', (req, res) => {
   try {
-    const records = getRecords();
-    
-    // 刪除所有簽名檔案
-    records.forEach((record) => {
-      if (record.donorSignature) {
-        const donorPath = path.join(__dirname, 'public', record.donorSignature);
-        if (fs.existsSync(donorPath)) fs.unlinkSync(donorPath);
-      }
-      if (record.adopterSignature) {
-        const adopterPath = path.join(__dirname, 'public', record.adopterSignature);
-        if (fs.existsSync(adopterPath)) fs.unlinkSync(adopterPath);
-      }
-    });
+    const { image, folder } = req.body;
+    if (!image) return res.status(400).json({ success: false, message: '缺少圖片資料' });
 
-    // 清空記錄檔案
-    saveRecords([]);
-    
-    // 同時清空當前工作中的合約
-    saveCurrentContract({});
-    
-    res.json({ success: true, message: '所有記錄已清空' });
+    const base64String = image.replace(/^data:image\/\w+;base64,/, '');
+    const now = new Date();
+    const ts = now.toISOString().replace(/[:.]/g, '-');
+    const safeFolder = (folder || 'unknown').replace(/[\\/:*?"<>|]/g, '_');
+    const filename = `snapshot_${safeFolder}_${ts}.png`;
+    const filepath = path.join(SNAPSHOTS_DIR, filename);
+
+    fs.writeFileSync(filepath, Buffer.from(base64String, 'base64'));
+
+    res.json({ success: true, filename });
   } catch (err) {
-    res.status(500).json({ success: false, message: '清空失敗：' + err.message });
+    console.error(err);
+    res.status(500).json({ success: false, message: '儲存截圖失敗' });
   }
 });
 
 /**
- * 靜態文件路由 - 簽名圖片
+ * GET /api/snapshots - 列出所有截圖
  */
-app.use('/signatures', express.static(SIGNATURES_DIR));
+app.get('/api/snapshots', (req, res) => {
+  try {
+    if (!fs.existsSync(SNAPSHOTS_DIR)) {
+      return res.json({ success: true, data: [] });
+    }
+    const files = fs.readdirSync(SNAPSHOTS_DIR)
+      .filter(f => f.endsWith('.png'))
+      .map(f => {
+        const stats = fs.statSync(path.join(SNAPSHOTS_DIR, f));
+        return {
+          filename: f,
+          url: `/api/files/snapshots/${f}`,
+          timestamp: stats.mtime.toISOString()
+        };
+      });
+
+    // Newest first
+    files.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+
+    res.json({ success: true, data: files });
+  } catch (err) {
+    res.status(500).json({ success: false, message: '讀取紀錄失敗' });
+  }
+});
+
+/**
+ * 靜態文件路由 - 讓前端可以讀取合約資料夾內的簽名圖檔
+ */
+app.use('/api/files/snapshots', express.static(SNAPSHOTS_DIR));
+app.use('/api/files', express.static(CONTRACTS_DIR));
+
+/**
+ * 靜態文件路由 - 舊版相容
+ */
+app.use('/signatures', express.static(path.join(DATA_DIR, 'signatures')));
 
 // 啟動伺服器
 const server = app.listen(PORT, () => {
   console.log(`\n✅ 寵物領養簽署系統已啟動！`);
   console.log(`\n📍 本地地址：http://localhost:${PORT}`);
+  console.log(`\n📂 合約資料夾：${CONTRACTS_DIR}`);
   console.log(`\n🌐 如需遠程分享，開啟新終端執行：`);
-  console.log(`   $ ngrok http 5000\n`);
+  console.log(`   $ ngrok http ${PORT}\n`);
 });

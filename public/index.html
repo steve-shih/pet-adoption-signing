@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>寵物認養合約簽署系統</title>
+  <title>寵物合約簽署系統</title>
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <style>
     :root {
@@ -47,7 +48,7 @@
     }
 
     .toolbar button {
-      flex: 1 1 140px;
+      flex: 1 1 120px;
     }
 
     .contract {
@@ -89,6 +90,18 @@
       color: var(--muted-text-color);
     }
 
+    .current-contract-name {
+      display: inline-block;
+      margin-top: 6px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      background: rgba(196, 107, 136, 0.08);
+      border: 1px solid var(--border-color);
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--primary-dark-color);
+    }
+
     .section {
       margin-top: 8px;
       padding: 8px;
@@ -107,7 +120,7 @@
     }
 
     .section-title::before {
-      content: "🐾";
+      content: "\1F43E";
       font-size: 14px;
       line-height: 1;
     }
@@ -140,14 +153,16 @@
 
     .input,
     button,
-    textarea {
+    textarea,
+    select {
       width: 100%;
       font-size: 16px;
       font-family: inherit;
       box-sizing: border-box;
     }
 
-    .input {
+    .input,
+    select {
       padding: 8px;
       border-radius: 10px;
       border: 1px solid #efd3dd;
@@ -156,9 +171,15 @@
       outline: none;
     }
 
-    .input:focus {
+    .input:focus,
+    select:focus {
       border-color: #e08aa2;
       box-shadow: 0 0 0 3px rgba(224, 138, 162, 0.16);
+    }
+
+    .input[readonly] {
+      background: #f9f0f3;
+      color: #b18495;
     }
 
     .button {
@@ -169,6 +190,12 @@
       cursor: pointer;
       background: #fff;
       color: var(--primary-dark-color);
+      transition: all 0.2s;
+    }
+
+    .button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px var(--shadow-color);
     }
 
     .button-primary {
@@ -179,6 +206,12 @@
 
     .button-danger {
       background: #f08080;
+      color: #fff;
+      border: none;
+    }
+
+    .button-secondary {
+      background: linear-gradient(135deg, #a8d8ea, #aa96da);
       color: #fff;
       border: none;
     }
@@ -238,8 +271,288 @@
       display: block;
     }
 
-    #jsonFileInput {
+    .save-status {
+      display: inline-block;
+      margin-left: 8px;
+      font-size: 10px;
+      color: var(--muted-text-color);
+    }
+
+    .save-status.saved {
+      color: #27ae60;
+    }
+
+    .save-status.unsaved {
+      color: #e67e22;
+    }
+
+    /* ========== Modal Tabs ========== */
+    .modal-tabs {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin-bottom: 20px;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    .modal-tab {
+      padding: 8px 16px;
+      border-radius: 12px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 800;
+      color: var(--muted-text-color);
+      transition: all 0.2s;
+      background: rgba(196, 107, 136, 0.05);
+      border: 1px solid transparent;
+    }
+
+    .modal-tab.active {
+      background: var(--primary-dark-color);
+      color: #fff;
+    }
+
+    .tab-content {
       display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* ========== Privacy Toolbar ========== */
+    .privacy-toolbar {
+      background: rgba(243, 154, 180, 0.08);
+      border: 1px solid #f39ab4;
+      border-radius: 12px;
+      padding: 8px 16px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    @media (max-width: 480px) {
+      .privacy-toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    /* ========== Input fields & Buttons ========== */
+    .password-section {
+      text-align: center;
+      padding: 30px 10px;
+      background: rgba(196, 107, 136, 0.04);
+      border-radius: 16px;
+      border: 1px dashed var(--border-color);
+    }
+
+    .password-hint {
+      font-size: 13px;
+      margin-bottom: 16px;
+      color: var(--text-color);
+      font-weight: 700;
+    }
+
+    /* ========== Modal ========== */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(90, 68, 80, 0.55);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .modal-overlay.hidden {
+      display: none;
+    }
+
+    .modal {
+      background: var(--card-color);
+      border-radius: 20px;
+      padding: 24px;
+      width: 100%;
+      max-width: 560px;
+      max-height: 80vh;
+      overflow-y: auto;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25);
+      animation: modalIn 0.3s ease-out;
+    }
+
+    @keyframes modalIn {
+      from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    .modal-title {
+      text-align: center;
+      margin: 0 0 6px;
+      font-size: 20px;
+      color: var(--primary-dark-color);
+    }
+
+    .modal-subtitle {
+      text-align: center;
+      font-size: 12px;
+      color: var(--muted-text-color);
+      margin-bottom: 16px;
+    }
+
+    .contract-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    .contract-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 14px;
+      border: 1px solid var(--border-color);
+      border-radius: 14px;
+      background: #fff;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .contract-item:hover {
+      border-color: var(--primary-dark-color);
+      box-shadow: 0 4px 16px var(--shadow-color);
+      transform: translateY(-1px);
+    }
+
+    .contract-item-icon {
+      font-size: 28px;
+      flex-shrink: 0;
+    }
+
+    .contract-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .contract-item-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .contract-item-meta {
+      font-size: 10px;
+      color: var(--muted-text-color);
+      margin-top: 2px;
+    }
+
+    .contract-type-badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 6px;
+      font-size: 9px;
+      font-weight: 700;
+      margin-right: 4px;
+    }
+
+    .badge-give {
+      background: #fff0e6;
+      color: #e67e22;
+    }
+
+    .badge-adopt {
+      background: #e6f7ff;
+      color: #1890ff;
+    }
+
+    .contract-item-delete {
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      border-radius: 8px;
+      border: none;
+      background: rgba(240, 128, 128, 0.12);
+      color: #f08080;
+      font-size: 14px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+    }
+
+    .contract-item-delete:hover {
+      background: #f08080;
+      color: #fff;
+    }
+
+    .no-contracts {
+      text-align: center;
+      padding: 20px;
+      color: var(--muted-text-color);
+      font-size: 13px;
+    }
+
+    .new-contract-type {
+      display: flex;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .type-option {
+      flex: 1;
+      padding: 14px 12px;
+      border-radius: 14px;
+      border: 2px solid var(--border-color);
+      background: #fff;
+      cursor: pointer;
+      text-align: center;
+      transition: all 0.2s;
+      font-weight: 700;
+      font-size: 15px;
+    }
+
+    .type-option:hover {
+      border-color: var(--primary-dark-color);
+      box-shadow: 0 4px 16px var(--shadow-color);
+      transform: translateY(-2px);
+    }
+
+    .type-option .type-icon {
+      font-size: 32px;
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .type-option .type-label {
+      color: var(--text-color);
+    }
+
+    .type-option .type-desc {
+      font-size: 10px;
+      font-weight: 400;
+      color: var(--muted-text-color);
+      margin-top: 4px;
     }
 
     @media (max-width: 640px) {
@@ -253,6 +566,10 @@
 
       .toolbar button {
         flex: 1 1 auto;
+      }
+
+      .modal {
+        max-height: 90vh;
       }
     }
 
@@ -275,49 +592,146 @@
         display: none !important;
       }
 
+      .modal-overlay {
+        display: none !important;
+      }
+
       .contract {
         box-shadow: none;
         border-radius: 0;
       }
+
+      .no-print {
+        display: none !important;
+      }
     }
   </style>
 </head>
+
 <body>
-  <div class="page">
+  <!-- ========== Contract Selector Modal ========== -->
+  <div id="contractModal" class="modal-overlay">
+    <div class="modal" style="max-width: 600px;">
+      <h2 class="modal-title">🐾 寵物合約簽署系統</h2>
+      <p class="modal-subtitle">管理、編輯與查看歷史存檔</p>
+
+      <div class="modal-tabs">
+        <div class="modal-tab active" id="tabNewBtn" onclick="switchModalTab('new')">🆕 建立新合約</div>
+        <div class="modal-tab" id="tabPublicBtn" onclick="switchModalTab('public')">📂 合約列表</div>
+        <div class="modal-tab" id="tabListBtn" onclick="switchModalTab('list')">🔐 歷史紀錄</div>
+      </div>
+
+      <!-- Tab 1: New Contract -->
+      <div id="tabNew" class="tab-content active">
+        <div class="new-contract-type">
+          <div class="type-option" onclick="createNewContract('送養合約')">
+            <span class="type-icon">🏠➡️</span>
+            <span class="type-label">送養合約</span>
+            <div class="type-desc">送出寵物・金額 0 元</div>
+          </div>
+          <div class="type-option" onclick="createNewContract('認養合約')">
+            <span class="type-icon">➡️🏠</span>
+            <span class="type-label">認養合約</span>
+            <div class="type-desc">領養寵物・金額自填</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Public Editable Contracts (歷史合約) -->
+      <div id="tabPublic" class="tab-content">
+        <div id="contractList" class="contract-list">
+          <div class="no-contracts">讀取中...</div>
+        </div>
+      </div>
+
+      <!-- Tab 3: Snapshots (歷史紀錄 - Password Protected) -->
+      <div id="tabList" class="tab-content">
+        <div id="passwordArea" class="password-section">
+          <p class="password-hint">🔐 本區塊受密碼保護，請輸入密碼以查看存檔截圖</p>
+          <input type="password" id="listPassword" class="input"
+            style="text-align:center; max-width:240px; margin-bottom:12px;" placeholder="請輸入密碼"
+            onkeyup="if(event.key==='Enter') verifyListPassword()" />
+          <button class="button button-primary" style="max-width:200px;" onclick="verifyListPassword()">確認解鎖</button>
+        </div>
+        <div id="historyListArea" style="display:none;">
+          <p style="text-align:center; font-size:11px; color:var(--muted-text-color); margin-bottom:12px;">
+            以下為每次存檔時自動產生的截圖紀錄</p>
+          <div id="snapshotList" class="contract-list">
+            <div class="no-contracts">讀取中...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========== Main Content ========== -->
+  <div class="page" id="mainPage" style="display:none;">
     <div class="toolbar">
-      <button class="button button-primary" onclick="saveToServer()">💾 保存</button>
-      <button class="button button-danger" onclick="clearAllData()">🗑️ 刪除</button>
+      <button class="button button-primary" onclick="forceSave()">💾 保存</button>
+      <button class="button button-secondary" onclick="showContractSelector()">📂 切換合約</button>
+      <button class="button button-danger" onclick="deleteCurrentContract()">🗑️ 刪除合約</button>
       <button class="button button-primary" onclick="downloadContractImage()">📸 下載圖片</button>
-      <input id="jsonFileInput" type="file" accept="application/json,.json" />
     </div>
 
     <div id="alertBox" class="alert"></div>
 
     <div id="contract" class="contract">
       <div class="hero">
-        <div class="hero-badge">ADOPTION AGREEMENT</div>
-        <h1>寵物認養合約書</h1>
-        <p class="subtitle">所有欄位可修改，自動儲存到本機，支援 JSON 匯入匯出</p>
+        <div class="hero-badge" id="heroBadge">ADOPTION AGREEMENT</div>
+        <h1 id="contractTitle">送養合約</h1>
+        <p class="subtitle">所有欄位可修改，填入雙方姓名後自動儲存</p>
+        <div class="current-contract-name" id="currentContractLabel">📄 新合約（尚未儲存）</div>
+        <span class="save-status" id="saveStatus"></span>
+      </div>
+
+      <!-- 合約類型（隱藏欄位） -->
+      <input type="hidden" class="persist-field" data-field="contractType" id="contractTypeField" value="送養合約" />
+
+      <!-- 隱私設定 (超緊湊小 BAR) -->
+      <div class="privacy-toolbar no-print" data-html2canvas-ignore="true" id="privacyBar"
+        style="justify-content: flex-start; min-height: 40px;">
+        <button id="adminPrivacyBtn" class="button button-primary"
+          style="padding: 4px 12px; font-size: 12px; margin: 0; background: #c46b88; border: none;"
+          onclick="unlockAdminPrivacy()">🛡️ 隱私權限管理</button>
+
+        <div id="adminPrivacyContent" style="display: none; align-items: center; gap: 15px; flex-wrap: wrap;">
+          <div style="display: flex; align-items: center; gap: 6px;">
+            <input type="checkbox" class="persist-field" data-field="isProtected" id="isProtectedField"
+              style="width: 18px; height: 18px; cursor: pointer;" onchange="triggerAutoSave()" />
+            <label for="isProtectedField"
+              style="font-size: 12px; color: #c46b88; cursor: pointer; font-weight: 700;">此合約設為密碼保護</label>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 11px; color: #c46b88;">設定開啟密碼：</span>
+            <input class="input persist-field" data-field="contractPassword" id="contractPasswordField" type="password"
+              style="padding: 4px 8px; font-size: 11px; max-width: 140px; border-color: #c46b88; height: 28px;"
+              placeholder="留空即為不設密碼" />
+          </div>
+          <button class="button button-secondary" style="padding: 2px 8px; font-size: 10px; margin: 0;"
+            onclick="hideAdminPrivacy()">隱藏設定</button>
+        </div>
       </div>
 
       <!-- 第一章：雙方資訊 -->
       <section class="section">
-        <h2 class="section-title">一、送養人與認養人</h2>
+        <h2 class="section-title" id="sectionParties">一、送養人與認養人</h2>
         <div class="info-grid two-columns">
           <div class="info-card">
-            <span class="label">送養人姓名</span>
-            <input class="input persist-field" data-field="giverName" type="text" placeholder="請輸入送養人姓名" />
+            <span class="label" id="labelGiverName">送養人姓名</span>
+            <input class="input persist-field" data-field="giverName" id="giverNameField" type="text"
+              placeholder="請輸入送養人姓名" />
           </div>
           <div class="info-card">
-            <span class="label">送養人身分證</span>
+            <span class="label" id="labelGiverId">送養人身分證</span>
             <input class="input persist-field" data-field="giverId" type="text" placeholder="請輸入送養人身分證" />
           </div>
           <div class="info-card">
-            <span class="label">認養人姓名</span>
-            <input class="input persist-field" data-field="adopterName" type="text" placeholder="請輸入認養人姓名" />
+            <span class="label" id="labelAdopterName">認養人姓名</span>
+            <input class="input persist-field" data-field="adopterName" id="adopterNameField" type="text"
+              placeholder="請輸入認養人姓名" />
           </div>
           <div class="info-card">
-            <span class="label">認養人身分證</span>
+            <span class="label" id="labelAdopterId">認養人身分證</span>
             <input class="input persist-field" data-field="adopterId" type="text" placeholder="請輸入認養人身分證" />
           </div>
         </div>
@@ -325,32 +739,32 @@
 
       <!-- 第二章：寵物資訊 -->
       <section class="section">
-        <h2 class="section-title">二、寵物相關資訊</h2>
+        <h2 class="section-title" id="sectionPet">二、寵物相關資訊</h2>
         <div class="info-grid two-columns">
           <div class="info-card">
             <span class="label">寵物品種</span>
             <input class="input persist-field" data-field="petBreed" type="text" placeholder="例：貓、狗、兔子等" />
           </div>
           <div class="info-card">
-            <span class="label">寵物名稱</span>
-            <input class="input persist-field" data-field="petName" type="text" placeholder="請輸入寵物名稱" />
-          </div>
-          <div class="info-card">
             <span class="label">晶片號碼</span>
-            <input class="input persist-field" data-field="catChip" type="text" placeholder="例：123456789, 987654321（多個用逗號分隔）" />
+            <textarea class="input persist-field" data-field="catChip" style="min-height:120px; resize:vertical;"
+              placeholder="例：123456789&#10;987654321&#10;（每行一個或用逗號分隔）"></textarea>
           </div>
           <div class="info-card">
-            <span class="label">認養日期</span>
-            <input class="input persist-field" data-field="adoptionDate" type="text" placeholder="例：2025年3月18日, 2025年3月25日（多個用逗號分隔）" />
+            <span class="label" id="labelDate">送養日期</span>
+            <input class="input persist-field" data-field="adoptionDate" type="text"
+              placeholder="例：2025年3月18日, 2025年3月25日（多個用逗號分隔）" />
+          </div>
+          <div class="info-card">
+            <span class="label" id="labelAmount">送養金額</span>
+            <input class="input persist-field" data-field="amount" id="amountField" type="text" value="0元" readonly
+              placeholder="0元" />
           </div>
         </div>
         <div class="info-card" style="margin-top:8px;">
-          <span class="label">認養日期</span>
-          <input class="input persist-field" data-field="adoptionDate" type="text" placeholder="例：2025年3月18日" />
-        </div>
-        <div class="info-card" style="margin-top:8px;">
-          <span class="label">送養原因</span>
-          <textarea class="input persist-field" data-field="reason" style="min-height:60px; resize:none;" placeholder="請說明為何送養"></textarea>
+          <span class="label" id="labelReason">送養原因</span>
+          <textarea class="input persist-field" data-field="reason" style="min-height:60px; resize:none;"
+            placeholder="請說明原因"></textarea>
         </div>
       </section>
 
@@ -359,15 +773,8 @@
         <h2 class="section-title">三、補充說明與注意事項</h2>
         <div class="info-card">
           <span class="label">補充事項</span>
-          <textarea class="input persist-field" data-field="notes" style="min-height:70px; resize:none;" placeholder="請輸入補充事項，如健康狀況、特殊習性等"></textarea>
-        </div>
-        <div class="info-card" style="margin-top:8px;">
-          <span class="label">認養承諾與條款</span>
-          <textarea class="input persist-field" data-field="promise" style="min-height:80px; resize:none;" placeholder="請說明認養人需遵守的承諾與條款"></textarea>
-        </div>
-        <div class="info-card" style="margin-top:8px;">
-          <span class="label">備註</span>
-          <textarea class="input persist-field" data-field="remarks" style="min-height:50px; resize:none;" placeholder="其他備註"></textarea>
+          <textarea class="input persist-field" data-field="notes" style="min-height:120px; resize:vertical;"
+            placeholder="請輸入補充事項，如健康狀況、特殊習性等"></textarea>
         </div>
       </section>
 
@@ -376,16 +783,18 @@
         <h2 class="section-title">四、電子簽名</h2>
         <div class="info-grid two-columns">
           <div class="signature-shell">
-            <div class="signature-title">送養人簽名</div>
+            <div class="signature-title" id="labelGiverSig">送養人簽名</div>
             <canvas id="giverSign"></canvas>
-            <div class="signature-hint">請於此以手指或滑鼠完成送養人電子簽名</div>
-            <button class="button" style="margin-top:6px; padding:6px;" onclick="clearSign('giver')">清除送養人簽名</button>
+            <div class="signature-hint" id="hintGiverSig">請於此以手指或滑鼠完成送養人電子簽名</div>
+            <button class="button" style="margin-top:6px; padding:6px;" onclick="clearSign('giver')"
+              id="btnClearGiverSig">清除送養人簽名</button>
           </div>
           <div class="signature-shell">
-            <div class="signature-title">認養人簽名</div>
+            <div class="signature-title" id="labelAdopterSig">認養人簽名</div>
             <canvas id="adopterSign"></canvas>
-            <div class="signature-hint">請於此以手指或滑鼠完成認養人電子簽名</div>
-            <button class="button" style="margin-top:6px; padding:6px;" onclick="clearSign('adopter')">清除認養人簽名</button>
+            <div class="signature-hint" id="hintAdopterSig">請於此以手指或滑鼠完成認養人電子簽名</div>
+            <button class="button" style="margin-top:6px; padding:6px;" onclick="clearSign('adopter')"
+              id="btnClearAdopterSig">清除認養人簽名</button>
           </div>
         </div>
       </section>
@@ -395,6 +804,11 @@
   </div>
 
   <script>
+    // ========== State ==========
+    let currentFolder = null;
+    let autoSaveTimer = null;
+    let currentContractType = '送養合約';
+
     const signatureCanvases = {
       giver: document.getElementById('giverSign'),
       adopter: document.getElementById('adopterSign')
@@ -404,17 +818,72 @@
       adopter: signatureCanvases.adopter.getContext('2d')
     };
     let activeSignatureType = null;
-    let autoSaveTimer = null;
 
+    // ========== Contract Type Wording ==========
+    /**
+     * Update all labels and wording based on contract type
+     */
+    function applyContractType(type) {
+      currentContractType = type;
+      document.getElementById('contractTypeField').value = type;
+
+      const isGive = (type === '送養合約');
+      const actionWord = isGive ? '送養' : '認養';
+
+      // Title
+      document.getElementById('contractTitle').textContent = type;
+      document.getElementById('heroBadge').textContent = isGive ? 'GIVING AGREEMENT' : 'ADOPTION AGREEMENT';
+
+      // Section 1 labels
+      document.getElementById('sectionParties').innerHTML = `一、${actionWord}人與${isGive ? '認養' : '送養'}人`;
+      document.getElementById('labelGiverName').textContent = isGive ? '送養人姓名' : '送養人姓名';
+      document.getElementById('labelGiverId').textContent = isGive ? '送養人身分證' : '送養人身分證';
+      document.getElementById('labelAdopterName').textContent = isGive ? '認養人姓名' : '認養人姓名';
+      document.getElementById('labelAdopterId').textContent = isGive ? '認養人身分證' : '認養人身分證';
+
+      // Section 2 labels
+      document.getElementById('labelDate').textContent = `${actionWord}日期`;
+      document.getElementById('labelAmount').textContent = `${actionWord}金額`;
+      document.getElementById('labelReason').textContent = `${actionWord}原因`;
+
+      // Amount field: 送養 = 0元 readonly, 認養 = editable
+      const amountField = document.getElementById('amountField');
+      if (isGive) {
+        amountField.value = '0元';
+        amountField.readOnly = true;
+        amountField.placeholder = '0元';
+      } else {
+        if (amountField.value === '0元' || amountField.value === '') {
+          amountField.value = '';
+        }
+        amountField.readOnly = false;
+        amountField.placeholder = '請輸入認養金額';
+      }
+
+      // Signature labels
+      document.getElementById('labelGiverSig').textContent = '送養人簽名';
+      document.getElementById('hintGiverSig').textContent = '請於此以手指或滑鼠完成送養人電子簽名';
+      document.getElementById('btnClearGiverSig').textContent = '清除送養人簽名';
+      document.getElementById('labelAdopterSig').textContent = '認養人簽名';
+      document.getElementById('hintAdopterSig').textContent = '請於此以手指或滑鼠完成認養人電子簽名';
+      document.getElementById('btnClearAdopterSig').textContent = '清除認養人簽名';
+    }
+
+    // ========== Alert ==========
     function showAlert(message, type) {
       const alertBox = document.getElementById('alertBox');
       alertBox.textContent = message;
       alertBox.className = `alert ${type}`;
-      setTimeout(() => {
-        alertBox.className = 'alert';
-      }, 3000);
+      setTimeout(() => { alertBox.className = 'alert'; }, 3000);
     }
 
+    function updateSaveStatus(text, className) {
+      const el = document.getElementById('saveStatus');
+      el.textContent = text;
+      el.className = `save-status ${className}`;
+    }
+
+    // ========== Canvas / Signature ==========
     function prepareCanvas(signatureType) {
       const canvas = signatureCanvases[signatureType];
       const context = signatureContexts[signatureType];
@@ -444,25 +913,22 @@
       const rect = signatureCanvases[signatureType].getBoundingClientRect();
       const clientX = event.touches ? event.touches[0].clientX : event.clientX;
       const clientY = event.touches ? event.touches[0].clientY : event.clientY;
-      return {
-        x: clientX - rect.left,
-        y: clientY - rect.top
-      };
+      return { x: clientX - rect.left, y: clientY - rect.top };
     }
 
     function startDrawing(signatureType, event) {
       event.preventDefault();
       activeSignatureType = signatureType;
-      const position = getPosition(signatureType, event);
+      const pos = getPosition(signatureType, event);
       signatureContexts[signatureType].beginPath();
-      signatureContexts[signatureType].moveTo(position.x, position.y);
+      signatureContexts[signatureType].moveTo(pos.x, pos.y);
     }
 
     function draw(signatureType, event) {
       if (activeSignatureType !== signatureType) return;
       event.preventDefault();
-      const position = getPosition(signatureType, event);
-      signatureContexts[signatureType].lineTo(position.x, position.y);
+      const pos = getPosition(signatureType, event);
+      signatureContexts[signatureType].lineTo(pos.x, pos.y);
       signatureContexts[signatureType].stroke();
     }
 
@@ -474,29 +940,8 @@
     }
 
     function getSignatureDataUrl(signatureType) {
-      const signatureDataUrl = signatureCanvases[signatureType].toDataURL('image/png');
-      return signatureDataUrl === 'data:,' ? '' : signatureDataUrl;
-    }
-
-    function getFormData() {
-      const persistFields = document.querySelectorAll('.persist-field');
-      const formData = {};
-
-      persistFields.forEach((element) => {
-        formData[element.dataset.field] = element.value;
-      });
-
-      formData.giverSignatureDataUrl = getSignatureDataUrl('giver');
-      formData.adopterSignatureDataUrl = getSignatureDataUrl('adopter');
-      formData.timestamp = new Date().toISOString();
-      return formData;
-    }
-
-    function triggerAutoSave() {
-      clearTimeout(autoSaveTimer);
-      autoSaveTimer = setTimeout(() => {
-        saveToServer();
-      }, 500);
+      const data = signatureCanvases[signatureType].toDataURL('image/png');
+      return data === 'data:,' ? '' : data;
     }
 
     function clearSign(signatureType, shouldSave = true) {
@@ -506,189 +951,468 @@
       if (shouldSave) triggerAutoSave();
     }
 
-    function clearAllSigns() {
-      clearSign('giver', false);
-      clearSign('adopter', false);
-      triggerAutoSave();
-      showAlert('✅ 所有簽名已清除', 'success');
-    }
-
-    function loadSignatureFromDataUrl(signatureType, signatureDataUrl) {
-      if (!signatureDataUrl) {
+    function loadSignatureFromDataUrl(signatureType, dataUrl) {
+      if (!dataUrl) { clearSign(signatureType, false); return; }
+      const img = new Image();
+      img.onload = () => {
         clearSign(signatureType, false);
-        return;
-      }
-      const signatureImage = new Image();
-      signatureImage.onload = () => {
-        clearSign(signatureType, false);
-        const canvasWidth = signatureCanvases[signatureType].getBoundingClientRect().width;
-        const canvasHeight = signatureCanvases[signatureType].getBoundingClientRect().height;
-        signatureContexts[signatureType].drawImage(signatureImage, 0, 0, canvasWidth, canvasHeight);
+        const w = signatureCanvases[signatureType].getBoundingClientRect().width;
+        const h = signatureCanvases[signatureType].getBoundingClientRect().height;
+        signatureContexts[signatureType].drawImage(img, 0, 0, w, h);
       };
-      signatureImage.src = signatureDataUrl;
+      img.src = dataUrl;
     }
 
-    function applyFormData(savedFormData) {
-      document.querySelectorAll('.persist-field').forEach((element) => {
-        const fieldName = element.dataset.field;
-        if (Object.prototype.hasOwnProperty.call(savedFormData, fieldName)) {
-          element.value = savedFormData[fieldName] || '';
+    /**
+     * 從 URL 載入簽名，如果失敗 (如檔案不存在) 則回退到 Base64 字串備份
+     */
+    function loadSignatureFromUrl(signatureType, url, fallbackDataUrl) {
+      const img = new Image();
+      img.onload = () => {
+        clearSign(signatureType, false);
+        const w = signatureCanvases[signatureType].getBoundingClientRect().width;
+        const h = signatureCanvases[signatureType].getBoundingClientRect().height;
+        signatureContexts[signatureType].drawImage(img, 0, 0, w, h);
+      };
+      img.onerror = () => {
+        if (fallbackDataUrl) loadSignatureFromDataUrl(signatureType, fallbackDataUrl);
+        else clearSign(signatureType, false);
+      };
+      img.src = url;
+    }
+
+    // ========== Form Data ==========
+    function getFormData() {
+      const fields = document.querySelectorAll('.persist-field');
+      const data = {};
+      fields.forEach(el => {
+        if (el.type === 'checkbox') {
+          data[el.dataset.field] = el.checked;
+        } else {
+          data[el.dataset.field] = el.value;
         }
       });
-      
-      loadSignatureFromDataUrl('giver', savedFormData.giverSignatureDataUrl || '');
-      loadSignatureFromDataUrl('adopter', savedFormData.adopterSignatureDataUrl || '');
+      data.giverSignatureDataUrl = getSignatureDataUrl('giver');
+      data.adopterSignatureDataUrl = getSignatureDataUrl('adopter');
+      data.timestamp = new Date().toISOString();
+      return data;
     }
 
-    async function loadFromServer() {
-      try {
-        const response = await fetch('/api/current');
-        const result = await response.json();
-        if (result.success && Object.keys(result.data).length > 0) {
-          applyFormData(result.data);
+    function applyFormData(savedData) {
+      skipAdminCheck = true; // Avoid admin prompt while loading
+      document.querySelectorAll('.persist-field').forEach(el => {
+        const fieldName = el.dataset.field;
+        if (Object.prototype.hasOwnProperty.call(savedData, fieldName)) {
+          if (el.type === 'checkbox') {
+            el.checked = !!savedData[fieldName];
+          } else {
+            el.value = savedData[fieldName] || '';
+          }
         }
-      } catch (error) {
-        console.error('載入合約失敗', error);
+      });
+      hideAdminPrivacy(); // Hide settings by default when switching contracts
+      skipAdminCheck = false;
+
+      // 如果有目前載入的資料夾，優先從資料夾載入圖檔 (讓手動換圖生效)
+      if (currentFolder) {
+        const ts = new Date().getTime(); // 防止快取
+        loadSignatureFromUrl('giver', `/api/files/${encodeURIComponent(currentFolder)}/signature_donor.png?v=${ts}`, savedData.giverSignatureDataUrl);
+        loadSignatureFromUrl('adopter', `/api/files/${encodeURIComponent(currentFolder)}/signature_adopter.png?v=${ts}`, savedData.adopterSignatureDataUrl);
+      } else {
+        loadSignatureFromDataUrl('giver', savedData.giverSignatureDataUrl || '');
+        loadSignatureFromDataUrl('adopter', savedData.adopterSignatureDataUrl || '');
       }
+
+      // 根據合約類型更新標題與顯示
+      applyContractType(savedData.contractType || '送養合約');
     }
 
-    function exportJsonFile() {
-      const jsonBlob = new Blob([JSON.stringify(getFormData(), null, 2)], { type: 'application/json' });
-      const jsonUrl = URL.createObjectURL(jsonBlob);
-      const link = document.createElement('a');
-      link.href = jsonUrl;
-      link.download = `寵物認養合約_${new Date().toISOString().slice(0, 10)}.json`;
-      link.click();
-      URL.revokeObjectURL(jsonUrl);
-      showAlert('✅ JSON 已匯出', 'success');
+    function clearForm() {
+      document.querySelectorAll('.persist-field').forEach(el => {
+        if (el.type === 'checkbox') el.checked = false;
+        else el.value = '';
+      });
+      hideAdminPrivacy();
+      clearSign('giver', false);
+      clearSign('adopter', false);
     }
 
-    function triggerImportJson() {
-      const jsonFileInput = document.getElementById('jsonFileInput');
-      jsonFileInput.click();
+    function canAutoSave() {
+      const giver = document.getElementById('giverNameField').value.trim();
+      const adopter = document.getElementById('adopterNameField').value.trim();
+      return giver.length > 0 && adopter.length > 0;
     }
 
-    function importJsonFile(event) {
-      const selectedFile = event.target.files && event.target.files[0];
-      if (!selectedFile) return;
-      const fileReader = new FileReader();
-      fileReader.onload = () => {
-        try {
-          const parsedData = JSON.parse(fileReader.result);
-          applyFormData(parsedData);
-          triggerAutoSave();
-          showAlert('✅ JSON 已載入', 'success');
-        } catch (error) {
-          showAlert('❌ JSON 載入失敗，請確認檔案格式正確', 'error');
-        }
-      };
-      fileReader.readAsText(selectedFile, 'utf-8');
-      event.target.value = '';
-    }
+    // === Modal Navigation & Security ===
+    let isListUnlocked = false;
 
-    function clearAllData() {
-      const confirmMessage = `⚠️ 警告：確定要清空所有資料嗎？此操作無法恢復！\n\n請輸入 "確認清空" 來確認：`;
-      
-      const userInput = prompt(confirmMessage);
-      
-      if (userInput === '確認清空') {
-        document.querySelectorAll('.persist-field').forEach((element) => {
-          element.value = '';
-        });
-        clearAllSigns();
-        clearAllDataOnServer();
-      } else if (userInput !== null) {
-        showAlert('❌ 確認碼錯誤，操作已取消', 'error');
-      }
-    }
-
-    async function clearAllDataOnServer() {
-      try {
-        const response = await fetch('/api/records', {
-          method: 'DELETE'
-        });
-        const result = await response.json();
-        if (result.success) {
-          showAlert('✅ 所有資料已清空', 'success');
+    function switchModalTab(tab) {
+      const tabs = ['new', 'public', 'list'];
+      tabs.forEach(t => {
+        const content = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1));
+        const btn = document.getElementById('tab' + t.charAt(0).toUpperCase() + t.slice(1) + 'Btn');
+        if (t === tab) {
+          content.classList.add('active');
+          btn.classList.add('active');
         } else {
-          showAlert('❌ 清空失敗：' + result.message, 'error');
+          content.classList.remove('active');
+          btn.classList.remove('active');
+        }
+      });
+
+      if (tab === 'list') {
+        if (isListUnlocked) {
+          document.getElementById('passwordArea').style.display = 'none';
+          document.getElementById('historyListArea').style.display = 'block';
+          loadSnapshotList();
+        } else {
+          document.getElementById('passwordArea').style.display = 'block';
+          document.getElementById('historyListArea').style.display = 'none';
+          setTimeout(() => document.getElementById('listPassword').focus(), 100);
+        }
+      }
+    }
+
+    function verifyListPassword() {
+      const pwd = document.getElementById('listPassword').value;
+      const targetB64 = 'c3RldmU5MTIxODQ1Nw=='; // Base64 for steve91218457
+      if (btoa(pwd) === targetB64) {
+        isListUnlocked = true;
+        document.getElementById('passwordArea').style.display = 'none';
+        document.getElementById('historyListArea').style.display = 'block';
+        loadSnapshotList();
+        showAlert('🔓 存檔紀錄已解鎖', 'success');
+      } else {
+        showAlert('❌ 密碼錯誤', 'error');
+        document.getElementById('listPassword').value = '';
+      }
+    }
+
+    // === Admin Functions ===
+    let skipAdminCheck = false;
+
+    function unlockAdminPrivacy() {
+      const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
+      if (adminPwd === 'steve91218457') {
+        document.getElementById('adminPrivacyContent').style.display = 'flex';
+        document.getElementById('adminPrivacyBtn').style.display = 'none';
+      } else if (adminPwd !== null) {
+        alert('❌ 管理員密碼錯誤');
+      }
+    }
+
+    function hideAdminPrivacy() {
+      document.getElementById('adminPrivacyContent').style.display = 'none';
+      document.getElementById('adminPrivacyBtn').style.display = 'block';
+    }
+
+    // ========== Contract Selector ==========
+    async function loadContractList() {
+      try {
+        const resp = await fetch('/api/contracts');
+        const result = await resp.json();
+        if (!result.success) throw new Error(result.message);
+        return result.data || [];
+      } catch (err) {
+        console.error('載入合約列表失敗', err);
+        return [];
+      }
+    }
+
+    async function showContractSelector() {
+      const modal = document.getElementById('contractModal');
+      modal.classList.remove('hidden');
+      switchModalTab('public'); // Default to showing public history as per "歷史合約是公開可以改的"
+
+      const listEl = document.getElementById('contractList');
+      listEl.innerHTML = '<div class="no-contracts">讀取中...</div>';
+
+      const contracts = await loadContractList();
+      if (contracts.length === 0) {
+        listEl.innerHTML = '<div class="no-contracts">🐾 目前沒有任何合約，請選擇建立新合約！</div>';
+      } else {
+        listEl.innerHTML = contracts.map(c => {
+          const typeBadge = (c.contractType === '認養合約')
+            ? '<span class="contract-type-badge badge-adopt">認養</span>'
+            : '<span class="contract-type-badge badge-give">送養</span>';
+          const lockIcon = c.isProtected ? '🔐' : '📋';
+          return `
+          <div class="contract-item" onclick="openContract('${escapeAttr(c.folder)}', ${c.isProtected})">
+            <div class="contract-item-icon">${lockIcon}</div>
+            <div class="contract-item-info">
+              <div class="contract-item-name">${typeBadge}${escapeHtml(c.folder)}</div>
+              <div class="contract-item-meta">
+                ${c.adoptionDate ? '📅 ' + escapeHtml(c.adoptionDate) : ''}
+              </div>
+            </div>
+            <button class="contract-item-delete" onclick="event.stopPropagation(); deleteContractFromList('${escapeAttr(c.folder)}')" title="刪除此合約">🗑</button>
+          </div>`;
+        }).join('');
+      }
+    }
+
+    // === Snapshot Operations ===
+    async function loadSnapshotList() {
+      const listEl = document.getElementById('snapshotList');
+      listEl.innerHTML = '<div class="no-contracts">讀取中...</div>';
+      try {
+        const resp = await fetch('/api/snapshots');
+        const result = await resp.json();
+        if (!result.success) throw new Error(result.message);
+
+        const snapshots = result.data || [];
+        if (snapshots.length === 0) {
+          listEl.innerHTML = '<div class="no-contracts">📸 目前尚無存檔紀錄。</div>';
+        } else {
+          listEl.innerHTML = snapshots.map(s => `
+          <div class="contract-item" onclick="window.open('${s.url}', '_blank')">
+            <div class="contract-item-icon">🖼️</div>
+            <div class="contract-item-info">
+              <div class="contract-item-name">${escapeHtml(s.filename)}</div>
+              <div class="contract-item-meta">🕒 ${new Date(s.timestamp).toLocaleString('zh-TW')}</div>
+            </div>
+          </div>`).join('');
         }
       } catch (err) {
-        showAlert('❌ 錯誤：' + err.message, 'error');
+        listEl.innerHTML = '<div class="no-contracts">❌ 載入失敗：' + err.message + '</div>';
       }
+    }
+
+    async function takeSnapshotToServer() {
+      try {
+        const canvas = await html2canvas(document.getElementById('contract'), { scale: 1.5, useCORS: true, backgroundColor: '#fffaf5' });
+        const image = canvas.toDataURL('image/png');
+        await fetch('/api/snapshots', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ image, folder: currentFolder })
+        });
+      } catch (err) {
+        console.error('快照儲存失敗', err);
+      }
+    }
+
+    function hideContractSelector() {
+      document.getElementById('contractModal').classList.add('hidden');
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    function escapeAttr(str) {
+      if (!str) return '';
+      return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    // ========== Contract Operations ==========
+    async function openContract(folder, isProtected) {
+      try {
+        const resp = await fetch(`/api/contracts/${encodeURIComponent(folder)}`);
+        const result = await resp.json();
+        if (!result.success) throw new Error(result.message);
+
+        const savedData = result.data;
+
+        // Password verification if protected
+        if (savedData.isProtected) {
+          // If isProtected is true, we ALWAYS ask for password, even if the password itself is empty
+          const pwd = prompt(`📄 合約「${folder}」設有密碼保護\n\n請輸入此合約的專屬存取密碼：`);
+          if (pwd === null) return; // Cancelled
+
+          const correctPwd = savedData.contractPassword || '';
+          if (pwd !== correctPwd.trim()) {
+            showAlert('❌ 密碼錯誤，存取遭拒', 'error');
+            return;
+          }
+        }
+
+        currentFolder = folder;
+        clearForm();
+        hideContractSelector();
+        document.getElementById('mainPage').style.display = 'block';
+        // Re-init canvases AFTER page is visible so dimensions are correct
+        setTimeout(() => {
+          Object.keys(signatureCanvases).forEach(st => prepareCanvas(st));
+          applyFormData(savedData);
+          updateContractLabel();
+          showAlert(`✅ 已載入合約：${folder}`, 'success');
+        }, 50);
+      } catch (err) {
+        showAlert('❌ 載入失敗：' + err.message, 'error');
+      }
+    }
+
+    function createNewContract(contractType) {
+      currentFolder = null;
+      clearForm();
+      applyContractType(contractType);
+
+      hideContractSelector();
+      document.getElementById('mainPage').style.display = 'block';
+      // Re-init canvases AFTER page is visible so dimensions are correct
+      setTimeout(() => {
+        Object.keys(signatureCanvases).forEach(st => prepareCanvas(st));
+        updateContractLabel();
+        updateSaveStatus('⚠️ 請填入雙方姓名以啟用自動存檔', 'unsaved');
+        showAlert(`📄 新${contractType}已建立，請開始填寫！`, 'success');
+      }, 50);
+    }
+
+    async function saveCurrentContract() {
+      if (!canAutoSave()) {
+        updateSaveStatus('⚠️ 請填入雙方姓名以啟用存檔', 'unsaved');
+        return;
+      }
+
+      try {
+        const formData = getFormData();
+
+        if (!currentFolder) {
+          const resp = await fetch('/api/contracts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          });
+          const result = await resp.json();
+          if (!result.success) throw new Error(result.message);
+          currentFolder = result.folder;
+          updateContractLabel();
+          updateSaveStatus('✅ 已建立並儲存', 'saved');
+          takeSnapshotToServer(); // Capture when created
+        } else {
+          const resp = await fetch(`/api/contracts/${encodeURIComponent(currentFolder)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(formData),
+          });
+          const result = await resp.json();
+          if (!result.success) throw new Error(result.message);
+          updateSaveStatus('✅ 已自動儲存', 'saved');
+          // No auto-snapshot to avoid frequency, or only on manual save? 
+          // User said "每次存檔", but auto-save triggers often.
+          // Let's only snapshot on forceSave() and specific intervals or every time as requested.
+          // To follow "每次存檔" literally:
+          takeSnapshotToServer();
+        }
+      } catch (err) {
+        console.error('保存錯誤', err);
+        updateSaveStatus('❌ 儲存失敗', 'unsaved');
+      }
+    }
+
+    async function forceSave() {
+      if (!canAutoSave()) {
+        showAlert('❌ 請先填入送養人和認養人姓名才能存檔', 'error');
+        return;
+      }
+      await saveCurrentContract();
+      showAlert(`✅ 合約已保存：${currentFolder}`, 'success');
+    }
+
+    async function deleteCurrentContract() {
+      if (!currentFolder) {
+        showAlert('❌ 目前沒有已儲存的合約可刪除', 'error');
+        return;
+      }
+
+      const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
+      if (adminPwd !== 'steve91218457') {
+        alert('❌ 管理員密碼錯誤，操作已取消');
+        return;
+      }
+
+      const input = prompt(`⚠️ 確定要刪除合約「${currentFolder}」嗎？\n\n請輸入「確認刪除」來確認：`);
+      if (input !== '確認刪除') {
+        if (input !== null) showAlert('❌ 確認碼錯誤，操作已取消', 'error');
+        return;
+      }
+      try {
+        const resp = await fetch(`/api/contracts/${encodeURIComponent(currentFolder)}`, { method: 'DELETE' });
+        const result = await resp.json();
+        if (!result.success) throw new Error(result.message);
+        currentFolder = null;
+        clearForm();
+        showAlert('✅ 合約已刪除', 'success');
+        showContractSelector();
+      } catch (err) {
+        showAlert('❌ 刪除失敗：' + err.message, 'error');
+      }
+    }
+
+    async function deleteContractFromList(folder) {
+      const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
+      if (adminPwd !== 'steve91218457') {
+        alert('❌ 管理員密碼錯誤，操作已取消');
+        return;
+      }
+
+      if (!confirm(`確定要刪除合約「${folder}」嗎？此操作無法恢復！`)) return;
+      try {
+        const resp = await fetch(`/api/contracts/${encodeURIComponent(folder)}`, { method: 'DELETE' });
+        const result = await resp.json();
+        if (!result.success) throw new Error(result.message);
+        if (currentFolder === folder) { currentFolder = null; clearForm(); }
+        showContractSelector();
+      } catch (err) {
+        alert('刪除失敗：' + err.message);
+      }
+    }
+
+    function updateContractLabel() {
+      const label = document.getElementById('currentContractLabel');
+      label.textContent = currentFolder ? `📂 ${currentFolder}` : '📄 新合約（尚未儲存）';
+    }
+
+    function triggerAutoSave() {
+      clearTimeout(autoSaveTimer);
+      autoSaveTimer = setTimeout(() => { saveCurrentContract(); }, 800);
     }
 
     function downloadContractImage() {
       showAlert('⏳ 正在生成圖片...', 'success');
       html2canvas(document.getElementById('contract'), {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#fffaf5'
-      }).then((resultCanvas) => {
+        scale: 2, useCORS: true, backgroundColor: '#fffaf5'
+      }).then(canvas => {
         const link = document.createElement('a');
-        link.href = resultCanvas.toDataURL('image/png');
-        link.download = `寵物認養合約_${new Date().toISOString().slice(0, 10)}.png`;
+        link.href = canvas.toDataURL('image/png');
+        const filename = currentFolder || `新合約_${new Date().toISOString().slice(0, 10)}`;
+        link.download = `${filename}.png`;
         link.click();
         showAlert('✅ 合約圖片已下載', 'success');
-      }).catch((err) => {
+      }).catch(err => {
         showAlert('❌ 生成圖片失敗：' + err.message, 'error');
       });
     }
 
-    async function saveToServer() {
-      try {
-        const formData = getFormData();
-        const response = await fetch('/api/current', {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(formData),
-        });
-
-        const result = await response.json();
-        if (!result.success) {
-          console.error('保存失敗', result.message);
-        }
-      } catch (err) {
-        console.error('保存錯誤：', err.message);
-      }
-    }
-
-    // 初始化簽名區域
-    Object.keys(signatureCanvases).forEach((signatureType) => {
+    // ========== Initialization ==========
+    Object.keys(signatureCanvases).forEach(signatureType => {
       const canvas = signatureCanvases[signatureType];
-      canvas.addEventListener('mousedown', (event) => startDrawing(signatureType, event));
-      canvas.addEventListener('mousemove', (event) => draw(signatureType, event));
+      canvas.addEventListener('mousedown', e => startDrawing(signatureType, e));
+      canvas.addEventListener('mousemove', e => draw(signatureType, e));
       canvas.addEventListener('mouseup', () => stopDrawing(signatureType));
       canvas.addEventListener('mouseleave', () => stopDrawing(signatureType));
-      canvas.addEventListener('touchstart', (event) => startDrawing(signatureType, event), { passive: false });
-      canvas.addEventListener('touchmove', (event) => draw(signatureType, event), { passive: false });
+      canvas.addEventListener('touchstart', e => startDrawing(signatureType, e), { passive: false });
+      canvas.addEventListener('touchmove', e => draw(signatureType, e), { passive: false });
       canvas.addEventListener('touchend', () => stopDrawing(signatureType));
       canvas.addEventListener('touchcancel', () => stopDrawing(signatureType));
     });
 
-    // 保存表單資料到伺服器
-    document.querySelectorAll('.persist-field').forEach((element) => {
-      element.addEventListener('input', triggerAutoSave);
-      element.addEventListener('change', triggerAutoSave);
+    document.querySelectorAll('.persist-field').forEach(el => {
+      el.addEventListener('input', triggerAutoSave);
+      el.addEventListener('change', triggerAutoSave);
     });
 
-    // JSON 載入
-    const jsonFileInput = document.getElementById('jsonFileInput');
-    jsonFileInput.addEventListener('change', importJsonFile);
+    Object.keys(signatureCanvases).forEach(st => prepareCanvas(st));
 
-    // 初始化
-    Object.keys(signatureCanvases).forEach((signatureType) => {
-      prepareCanvas(signatureType);
-    });
-    loadFromServer();
-
-    // 視窗大小改變時重新繪製簽名
     window.addEventListener('resize', () => {
-      Object.keys(signatureCanvases).forEach((signatureType) => {
-        prepareCanvas(signatureType);
-      });
-      loadFromServer();
+      Object.keys(signatureCanvases).forEach(st => prepareCanvas(st));
     });
+
+    // Show contract selector on page load
+    showContractSelector();
   </script>
 </body>
+
 </html>
