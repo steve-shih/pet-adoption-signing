@@ -82,6 +82,13 @@ function saveSignatureToFolder(contractDir, base64Data, filename) {
 // ================== API Routes ==================
 
 /**
+ * GET /api/ping - 健康檢查
+ */
+app.get('/api/ping', (req, res) => {
+  res.json({ success: true, timestamp: new Date().toISOString(), status: 'alive' });
+});
+
+/**
  * GET / - 主頁面
  */
 app.get('/', (req, res) => {
@@ -339,11 +346,12 @@ app.use('/api/files', express.static(CONTRACTS_DIR));
  */
 app.use('/signatures', express.static(path.join(DATA_DIR, 'signatures')));
 
+// --- ngrok 自動修復機制 (Watchdog) ---
 // 啟動伺服器
-const server = app.listen(PORT, () => {
+app.listen(PORT, () => {
   console.log(`\n✅ 寵物領養簽署系統已啟動！`);
-  console.log(`\n📍 本地地址：http://localhost:${PORT}`);
-  console.log(`\n📂 合約資料夾：${CONTRACTS_DIR}`);
-  console.log(`\n🌐 如需遠程分享，開啟新終端執行：`);
-  console.log(`   $ ngrok http ${PORT}\n`);
+  console.log(`📍 本地地址：http://localhost:${PORT}`);
+  console.log(`📂 合約資料夾：${CONTRACTS_DIR}`);
+  console.log(`🌐 如需遠程分享，開新 CMD 視窗執行：`);
+  console.log(`   ngrok http 5000 --domain idiosyncratic-incompressibly-brandon.ngrok-free.dev\n`);
 });

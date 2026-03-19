@@ -1,0 +1,64 @@
+name: Deploy to GCP Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+    # Trigger only when a PR is merged into main (push event after merge)
+    # This will also run on any direct push to main.
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      # 1️⃣ Checkout the repository
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2️⃣ Set up Node (for npm install if needed)
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # 3️⃣ Install dependencies (optional – needed if you want to run tests before build)
+      - name: Install dependencies
+        run: npm ci --only=production
+
+      # 4️⃣ Authenticate to Google Cloud using a service account key stored in secret GCP_SA_KEY (base64 encoded)
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # 5️⃣ Set up Cloud SDK (gcloud)
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          install_components: 'beta'
+
+      # 6️⃣ Configure Docker to use Artifact Registry
+      - name: Configure Docker for Artifact Registry
+        run: |
+          gcloud auth configure-docker asia-northeast1-docker.pkg.dev
+
+      # 7️⃣ Build Docker image and push to Artifact Registry
+      - name: Build and push Docker image
+        run: |
+          IMAGE_TAG=asia-northeast1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pet-signing-repo/pet-signing:${{ github.sha }}
+          docker build -t $IMAGE_TAG .
+          docker push $IMAGE_TAG
+
+      # 8️⃣ Deploy to Cloud Run (replace existing service)
+      - name: Deploy to Cloud Run
+        run: |
+          IMAGE_TAG=asia-northeast1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/pet-signing-repo/pet-signing:${{ github.sha }}
+          gcloud run deploy pet-signing \
+            --image $IMAGE_TAG \
+            --region asia-northeast1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 5000 \
+            --quiet
