@@ -674,6 +674,7 @@
       <button class="button button-primary" onclick="forceSave()">💾 保存</button>
       <button class="button button-secondary" onclick="showContractSelector()">📂 切換合約</button>
       <button class="button button-danger" onclick="deleteCurrentContract()">🗑️ 刪除合約</button>
+      <button class="button" style="background: #a8e6cf; color: #2d4a53; border-color: #a8e6cf;" onclick="shareContractLink()">🔗 分享連結</button>
       <button class="button button-primary" onclick="downloadContractImage()">📸 下載圖片</button>
     </div>
 
@@ -1407,6 +1408,25 @@
       el.addEventListener('input', triggerAutoSave);
       el.addEventListener('change', triggerAutoSave);
     });
+    function shareContractLink() {
+      if (!currentFolder) {
+        showAlert('❌ 目前沒有載入中的合約', 'error');
+        return;
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set('id', currentFolder);
+      const shareUrl = url.toString();
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(shareUrl).then(() => {
+          showAlert('✅ 連結已複製到剪貼簿，可直接傳給客戶', 'success');
+        }).catch(err => {
+          prompt('⚠️ 無法自動複製，請手動選取下列網址：', shareUrl);
+        });
+      } else {
+        prompt('⚠️ 請選取下列網址手動複製：', shareUrl);
+      }
+    }
 
     Object.keys(signatureCanvases).forEach(st => prepareCanvas(st));
 
@@ -1414,8 +1434,14 @@
       Object.keys(signatureCanvases).forEach(st => prepareCanvas(st));
     });
 
-    // Show contract selector on page load
-    showContractSelector();
+    // Show contract selector or load from URL id
+    const urlParams = new URLSearchParams(window.location.search);
+    const id = urlParams.get('id') || urlParams.get('folder');
+    if (id) {
+      openContract(decodeURIComponent(id));
+    } else {
+      showContractSelector();
+    }
   </script>
 </body>
 
