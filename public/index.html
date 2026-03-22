@@ -673,8 +673,9 @@
     <div class="toolbar">
       <button class="button button-primary" onclick="forceSave()">💾 保存</button>
       <button class="button button-secondary" onclick="showContractSelector()">📂 切換合約</button>
-      <button class="button button-danger" onclick="deleteCurrentContract()">🗑️ 刪除合約</button>
+      <button class="button button-danger" id="btnDeleteMain" style="display:none;" onclick="deleteCurrentContract()">🗑️ 刪除合約</button>
       <button class="button" style="background: #a8e6cf; color: #2d4a53; border-color: #a8e6cf;" onclick="shareContractLink()">🔗 分享連結</button>
+      <button class="button button-secondary" id="btnToggleTypeMain" style="display:none;" onclick="toggleContractType()">📑 切換類型</button>
       <button class="button button-primary" onclick="downloadContractImage()">📸 下載圖片</button>
     </div>
 
@@ -813,6 +814,7 @@
     let currentFolder = null;
     let autoSaveTimer = null;
     let currentContractType = '送養合約';
+    let isAdmin = false;
 
     const signatureCanvases = {
       giver: document.getElementById('giverSign'),
@@ -1099,16 +1101,35 @@
     function unlockAdminPrivacy() {
       const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
       if (adminPwd === 'steve91218457') {
+        isAdmin = true;
         document.getElementById('adminPrivacyContent').style.display = 'flex';
         document.getElementById('adminPrivacyBtn').style.display = 'none';
+        updateAdminUI();
+        showAlert('🔓 管理員權限已解鎖', 'success');
       } else if (adminPwd !== null) {
         alert('❌ 管理員密碼錯誤');
       }
     }
 
     function hideAdminPrivacy() {
+      isAdmin = false;
       document.getElementById('adminPrivacyContent').style.display = 'none';
       document.getElementById('adminPrivacyBtn').style.display = 'block';
+      updateAdminUI();
+    }
+
+    function updateAdminUI() {
+      const display = isAdmin ? 'inline-block' : 'none';
+      const toggleBtn = document.getElementById('btnToggleTypeMain');
+      const deleteBtn = document.getElementById('btnDeleteMain');
+      if (toggleBtn) toggleBtn.style.display = display;
+      if (deleteBtn) deleteBtn.style.display = display;
+      
+      // Refresh list if it's open to update delete icons
+      if (!document.getElementById('contractModal').classList.contains('hidden')) {
+        const activeTab = document.querySelector('.modal-tab.active');
+        if (activeTab && activeTab.id === 'tabPublicBtn') loadAndRefillContractList();
+      }
     }
 
     // ========== Contract Selector ==========
@@ -1141,6 +1162,7 @@
             ? '<span class="contract-type-badge badge-adopt">認養</span>'
             : '<span class="contract-type-badge badge-give">送養</span>';
           const lockIcon = c.isProtected ? '🔐' : '📋';
+          const deleteBtn = isAdmin ? `<button class="contract-item-delete" onclick="event.stopPropagation(); deleteContractFromList('${escapeAttr(c.folder)}')" title="刪除此合約">🗑</button>` : '';
           return `
           <div class="contract-item" onclick="openContract('${escapeAttr(c.folder)}', ${c.isProtected})">
             <div class="contract-item-icon">${lockIcon}</div>
@@ -1150,10 +1172,16 @@
                 ${c.adoptionDate ? '📅 ' + escapeHtml(c.adoptionDate) : ''}
               </div>
             </div>
-            <button class="contract-item-delete" onclick="event.stopPropagation(); deleteContractFromList('${escapeAttr(c.folder)}')" title="刪除此合約">🗑</button>
+            ${deleteBtn}
           </div>`;
         }).join('');
       }
+    }
+
+    // Proxy for refreshing the list
+    function loadAndRefillContractList() {
+      const modal = document.getElementById('contractModal');
+      if (!modal.classList.contains('hidden')) showContractSelector();
     }
 
     // === Snapshot Operations ===
@@ -1427,6 +1455,14 @@
         prompt('⚠️ 請選取下列網址手動複製：', shareUrl);
       }
     }
+    function toggleContractType() {
+      const newType = (currentContractType === '送養合約') ? '認養合約' : '送養合約';
+      if (!confirm(`確定要將目前的合約切換為「${newType}」模式嗎？\n(切換後金額等設定將自動調整)`)) return;
+      applyContractType(newType);
+      triggerAutoSave();
+      showAlert(`✅ 已變更為：${newType}`, 'success');
+    }
+
 
     Object.keys(signatureCanvases).forEach(st => prepareCanvas(st));
 
