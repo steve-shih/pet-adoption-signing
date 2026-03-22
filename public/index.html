@@ -673,9 +673,12 @@
     <div class="toolbar">
       <button class="button button-primary" onclick="forceSave()">💾 保存</button>
       <button class="button button-secondary" onclick="showContractSelector()">📂 切換合約</button>
-      <button class="button button-danger" id="btnDeleteMain" style="display:none;" onclick="deleteCurrentContract()">🗑️ 刪除合約</button>
-      <button class="button" style="background: #a8e6cf; color: #2d4a53; border-color: #a8e6cf;" onclick="shareContractLink()">🔗 分享連結</button>
-      <button class="button button-secondary" id="btnToggleTypeMain" style="display:none;" onclick="toggleContractType()">📑 切換類型</button>
+      <button class="button button-danger" id="btnDeleteMain" style="display:none;"
+        onclick="deleteCurrentContract()">🗑️ 刪除合約</button>
+      <button class="button" style="background: #a8e6cf; color: #2d4a53; border-color: #a8e6cf;"
+        onclick="shareContractLink()">🔗 分享連結</button>
+      <button class="button button-secondary" id="btnToggleTypeMain" style="display:none;"
+        onclick="toggleContractType()">📑 切換類型</button>
       <button class="button button-primary" onclick="downloadContractImage()">📸 下載圖片</button>
     </div>
 
@@ -685,8 +688,7 @@
       <div class="hero">
         <div class="hero-badge" id="heroBadge">ADOPTION AGREEMENT</div>
         <h1 id="contractTitle">送養合約</h1>
-        <p class="subtitle">所有欄位可修改，填入雙方姓名後自動儲存</p>
-        <div class="current-contract-name" id="currentContractLabel">📄 新合約（尚未儲存）</div>
+        <div class="current-contract-name" id="currentContractLabel" onclick="renameContract()" style="cursor:pointer;" title="管理員權限下可點擊重命名">📄 新合約（尚未儲存）</div>
         <span class="save-status" id="saveStatus"></span>
       </div>
 
@@ -1124,7 +1126,7 @@
       const deleteBtn = document.getElementById('btnDeleteMain');
       if (toggleBtn) toggleBtn.style.display = display;
       if (deleteBtn) deleteBtn.style.display = display;
-      
+
       // Refresh list if it's open to update delete icons
       if (!document.getElementById('contractModal').classList.contains('hidden')) {
         const activeTab = document.querySelector('.modal-tab.active');
@@ -1455,6 +1457,38 @@
         prompt('⚠️ 請選取下列網址手動複製：', shareUrl);
       }
     }
+    async function renameContract() {
+      if (!currentFolder) return;
+      if (!isAdmin) {
+        showAlert('🛡️ 只有管理員可以變更合約編號名稱', 'error');
+        return;
+      }
+      
+      const newName = prompt(`📝 重命名合約「${currentFolder}」\n\n注意：這會更改連結，舊連結將會失效。\n\n請輸入新名稱：`, currentFolder);
+      if (!newName || newName === currentFolder) return;
+
+      try {
+        const resp = await fetch(`/api/contracts/${encodeURIComponent(currentFolder)}/rename`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ newName })
+        });
+        const result = await resp.json();
+        if (!result.success) throw new Error(result.message);
+
+        currentFolder = result.folder;
+        updateContractLabel();
+        showAlert(`✅ 已更名為：${result.folder}`, 'success');
+        
+        // 更新歷史紀錄中的 URL，避免重新整理後載入錯誤
+        const url = new URL(window.location.href);
+        url.searchParams.set('id', currentFolder);
+        window.history.pushState({}, '', url);
+      } catch (err) {
+        showAlert('❌ 重命名失敗：' + err.message, 'error');
+      }
+    }
+
     function toggleContractType() {
       const newType = (currentContractType === '送養合約') ? '認養合約' : '送養合約';
       if (!confirm(`確定要將目前的合約切換為「${newType}」模式嗎？\n(切換後金額等設定將自動調整)`)) return;

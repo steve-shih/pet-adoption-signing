@@ -236,6 +236,57 @@ app.put('/api/contracts/:folder', async (req, res) => {
 });
 
 /**
+ * POST /api/contracts/:folder/rename - 重命名合約 (改名連結 ID)
+ */
+app.post('/api/contracts/:folder/rename', async (req, res) => {
+  try {
+    const oldName = req.params.folder;
+    const { newName: rawNewName } = req.body;
+    if (!rawNewName) return res.status(400).json({ success: false, message: '缺少新名稱' });
+
+    // 清洗檔名防止噴錯
+    const newName = rawNewName.replace(/[\\/:*?"<>|]/g, '_');
+    
+    // 1. 檢查新名稱是否已存在 (DB & Local)
+    const oldDirPath = path.join(CONTRACTS_DIR, oldName);
+    const newDirPath = path.join(CONTRACTS_DIR, newName);
+    
+    if (isMongoReady) {
+      const exists = await Contract.findOne({ folderName: newName });
+      if (exists) return res.status(400).json({ success: false, message: '此名稱在資料庫已存在' });
+    }
+    if (fs.existsSync(newDirPath)) {
+      return res.status(400).json({ success: false, message: '此名稱在檔案系統已存在' });
+    }
+
+    // 2. 更新 MongoDB
+    if (isMongoReady) {
+      await Contract.findOneAndUpdate({ folderName: oldName }, { folderName: newName });
+      await Snapshot.updateMany({ folderName: oldName }, { folderName: newName });
+    }
+
+    // 3. 實體檔案系統改名
+    if (fs.existsSync(oldDirPath)) {
+      fs.renameSync(oldDirPath, newDirPath);
+      // 更新資料夾內的 contract.json
+      const jsonPath = path.join(newDirPath, 'contract.json');
+      if (fs.existsSync(jsonPath)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+          data.folderName = newName;
+          fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2));
+        } catch (e) { console.error('更新本地 JSON 失敗', e); }
+      }
+    }
+
+    res.json({ success: true, message: '合約已成功重命名', folder: newName });
+  } catch (err) {
+    console.error('重命名失敗:', err);
+    res.status(500).json({ success: false, message: '重命名失敗' });
+  }
+});
+
+/**
  * DELETE /api/contracts/:folder - 軟刪除
  */
 app.delete('/api/contracts/:folder', async (req, res) => {
