@@ -9,6 +9,7 @@ const mongoose = require('mongoose');
 const Contract = require('./models/Contract');
 const Snapshot = require('./models/Snapshot');
 const User = require('./models/User');
+const LoginHistory = require('./models/LoginHistory');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -106,6 +107,29 @@ app.post('/api/auth/login', async (req, res) => {
       role: user.role,
       defaultContractPassword: user.defaultContractPassword || '00000'
     } });
+
+    // 📍 登入紀錄 (背景非同步執行，不阻擋回應)
+    (async () => {
+      try {
+        let ip = req.headers['x-forwarded-for'] || req.socket.remoteAddress;
+        if (ip && ip.includes(',')) ip = ip.split(',')[0];
+        if (ip && ip.includes('::ffff:')) ip = ip.replace('::ffff:', '');
+        
+        let location = '未知的地點';
+        // 判斷是否為本地
+        if (ip === '::1' || ip === '127.0.0.1') {
+          location = '本機 (Localhost)';
+        } else if (ip) {
+          try {
+            const locResp = await fetch(`http://ip-api.com/json/${ip}?lang=zh-TW`);
+            const locData = await locResp.json();
+            if (locData.status === 'success') location = `${locData.country} ${locData.city}`;
+          } catch(e) {}
+        }
+        await new LoginHistory({ userId: user._id, ip, location }).save();
+      } catch (err) { console.error('紀錄登入歷史失敗:', err); }
+    })();
+
   } catch (e) { 
     console.error('>>> 登入異常ERR:', e);
     res.status(500).json({ success: false, message: '登入失敗' }); 
@@ -142,6 +166,15 @@ app.put('/api/auth/profile', auth, async (req, res) => {
     res.json({ success: true, message: '更新成功' });
   } catch (e) { res.status(500).json({ success: false, message: '更新失敗' }); }
 });
+
+app.get('/api/auth/login-history', auth, async (req, res) => {
+  try {
+    if (!isMongoReady) return res.json({ success: true, history: [] });
+    const history = await LoginHistory.find({ userId: req.user._id }).sort({ timestamp: -1 }).limit(20);
+    res.json({ success: true, history });
+  } catch (err) { res.status(500).json({ success: false, message: '讀取紀錄失敗' }); }
+});
+
 
 // --------------------------------------------------------------------------
 // 📑 4. 合約與檔案 API

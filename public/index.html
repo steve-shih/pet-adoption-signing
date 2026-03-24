@@ -722,6 +722,33 @@
     </div>
   </div>
 
+  <!-- Login History Modal -->
+  <div id="loginHistoryModal" class="modal">
+    <div class="modal-content" style="max-width: 600px;">
+      <div class="modal-header">
+        <h2>📜 歷史登入紀錄</h2>
+        <span class="close" onclick="closeModal('loginHistoryModal')">&times;</span>
+      </div>
+      <div style="max-height: 400px; overflow-y: auto;">
+        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 14px;">
+          <thead style="background: #fdf2f5; color: var(--primary-dark-color);">
+            <tr>
+              <th style="padding: 10px; border-bottom: 2px solid #efd3dd;">登入時間</th>
+              <th style="padding: 10px; border-bottom: 2px solid #efd3dd;">IP 位址</th>
+              <th style="padding: 10px; border-bottom: 2px solid #efd3dd;">登入地點</th>
+            </tr>
+          </thead>
+          <tbody id="loginHistoryTableBody">
+            <tr><td colspan="3" style="padding: 10px; text-align: center;">載入中...</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div style="margin-top: 20px; text-align: right;">
+        <button class="button button-secondary" onclick="closeModal('loginHistoryModal')">關閉</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Profile Editor Modal -->
   <div id="profileModal" class="modal">
     <div class="modal-content" style="max-width: 500px;">
@@ -821,7 +848,8 @@
     <div class="toolbar">
       <div id="userInfoBlock" style="display: flex; align-items: center; gap: 8px; margin-right: auto; flex-wrap: wrap;">
         <div class="user-tag">👤 <span id="displayUserName">載入中...</span></div>
-        <button class="button" style="padding: 4px 8px; font-size: 11px; flex: 0;" onclick="showProfileEditor()">⚙️ 編輯資訊</button>
+        <button class="button" style="padding: 4px 8px; font-size: 11px; flex: 0;" onclick="showProfileEditor()">⚙️ 編輯店家資訊</button>
+        <button class="button" style="padding: 4px 8px; font-size: 11px; flex: 0;" onclick="showLoginHistory()">📜 登入紀錄</button>
         <button class="button" style="padding: 4px 8px; font-size: 11px; flex: 0; background: #fff0f0;" onclick="handleLogout()">🚪 登出</button>
       </div>
       <button class="button button-primary" onclick="forceSave()">💾 保存</button>
@@ -1048,6 +1076,28 @@
     function handleLogout() {
       localStorage.removeItem('petAuthUser');
       location.reload();
+    }
+
+    async function showLoginHistory() {
+      openModal('loginHistoryModal');
+      const tbody = document.getElementById('loginHistoryTableBody');
+      tbody.innerHTML = '<tr><td colspan="3" style="padding: 10px; text-align: center;">載入中...</td></tr>';
+      
+      const resp = await apiFetch('/api/auth/login-history');
+      if (!resp) return;
+      const result = await resp.json();
+      
+      if (result.success && result.history.length > 0) {
+        tbody.innerHTML = result.history.map(record => `
+          <tr style="border-bottom: 1px solid #eee;">
+            <td style="padding: 10px;">${new Date(record.timestamp).toLocaleString('zh-TW')}</td>
+            <td style="padding: 10px; font-family: monospace;">${record.ip || '未記錄'}</td>
+            <td style="padding: 10px;">${escapeHtml(record.location || '未知')}</td>
+          </tr>
+        `).join('');
+      } else {
+        tbody.innerHTML = '<tr><td colspan="3" style="padding: 10px; text-align: center; color: var(--muted-text-color);">尚無歷史紀錄</td></tr>';
+      }
     }
 
     async function showProfileEditor() {
