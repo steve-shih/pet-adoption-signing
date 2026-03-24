@@ -100,7 +100,12 @@ app.post('/api/auth/login', async (req, res) => {
     }
     
     console.log(`>>> 登入成功: ${user.username}`);
-    res.json({ success: true, user: { id: user._id, fullName: user.fullName, role: user.role } });
+    res.json({ success: true, user: { 
+      id: user._id, 
+      fullName: user.fullName, 
+      role: user.role,
+      defaultContractPassword: user.defaultContractPassword || '00000'
+    } });
   } catch (e) { 
     console.error('>>> 登入異常ERR:', e);
     res.status(500).json({ success: false, message: '登入失敗' }); 
@@ -129,9 +134,10 @@ app.get('/api/auth/profile', auth, (req, res) => {
 
 app.put('/api/auth/profile', auth, async (req, res) => {
   try {
-    const { password, fullName, phone, email, address } = req.body;
+    const { password, fullName, phone, email, address, defaultContractPassword } = req.body;
     const updates = { fullName, phone, email, address };
     if (password) updates.password = Buffer.from(password).toString('base64');
+    if (defaultContractPassword !== undefined) updates.defaultContractPassword = defaultContractPassword;
     await User.findByIdAndUpdate(req.user._id, updates);
     res.json({ success: true, message: '更新成功' });
   } catch (e) { res.status(500).json({ success: false, message: '更新失敗' }); }

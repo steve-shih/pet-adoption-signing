@@ -739,6 +739,10 @@
           <input type="password" id="editPass" class="input">
         </div>
         <div class="info-card">
+          <label class="label">預設合約密碼</label>
+          <input type="text" id="editDefaultPass" class="input" placeholder="例如: 00000">
+        </div>
+        <div class="info-card">
           <label class="label">手機號碼</label>
           <input type="text" id="editPhone" class="input">
         </div>
@@ -846,7 +850,7 @@
         style="justify-content: flex-start; min-height: 40px;">
         <button id="adminPrivacyBtn" class="button button-primary"
           style="padding: 4px 12px; font-size: 12px; margin: 0; background: #c46b88; border: none;"
-          onclick="unlockAdminPrivacy()">🛡️ 隱私權限管理</button>
+          onclick="unlockAdminPrivacy()">🛡️ 合約密碼與防護設定</button>
 
         <div id="adminPrivacyContent" style="display: none; align-items: center; gap: 15px; flex-wrap: wrap;">
           <div style="display: flex; align-items: center; gap: 6px;">
@@ -1057,6 +1061,7 @@
       document.getElementById('editEmail').value = user.email || '';
       document.getElementById('editAddress').value = user.address || '';
       document.getElementById('editPass').value = '';
+      document.getElementById('editDefaultPass').value = user.defaultContractPassword || '00000';
       openModal('profileModal');
     }
 
@@ -1065,7 +1070,8 @@
         fullName: document.getElementById('editFullName').value,
         phone: document.getElementById('editPhone').value,
         email: document.getElementById('editEmail').value,
-        address: document.getElementById('editAddress').value
+        address: document.getElementById('editAddress').value,
+        defaultContractPassword: document.getElementById('editDefaultPass').value || '00000'
       };
       const newPass = document.getElementById('editPass').value;
       if (newPass) data.password = newPass;
@@ -1372,22 +1378,10 @@
     let skipAdminCheck = false;
 
     function unlockAdminPrivacy() {
-      if (isAdmin) {
-        document.getElementById('adminPrivacyContent').style.display = 'flex';
-        document.getElementById('adminPrivacyBtn').style.display = 'none';
-        updateAdminUI();
-        return;
-      }
-      const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
-      if (adminPwd === 'steve91218457') {
-        isAdmin = true;
-        document.getElementById('adminPrivacyContent').style.display = 'flex';
-        document.getElementById('adminPrivacyBtn').style.display = 'none';
-        updateAdminUI();
-        showAlert('🔓 管理員權限已解鎖', 'success');
-      } else if (adminPwd !== null) {
-        alert('❌ 管理員密碼錯誤');
-      }
+      // 全面開放給合約所有人使用
+      document.getElementById('adminPrivacyContent').style.display = 'flex';
+      document.getElementById('adminPrivacyBtn').style.display = 'none';
+      if (isAdmin) updateAdminUI();
     }
 
     function hideAdminPrivacy() {
@@ -1613,12 +1607,13 @@
             formData.giverSignatureDataUrl && formData.adopterSignatureDataUrl
           );
           if (isFull) {
+            const defPwd = currentUser.defaultContractPassword || '00000';
             formData.isProtected = true;
-            formData.contractPassword = '000000';
+            formData.contractPassword = defPwd;
             // 同步更新 UI
             document.getElementById('isProtectedField').checked = true;
-            document.getElementById('contractPasswordField').value = '000000';
-            showAlert('🔒 偵測到填寫完整且雙方已簽名，已自動進入上鎖保護模式 (預設密碼: 000000)', 'success');
+            document.getElementById('contractPasswordField').value = defPwd;
+            showAlert(`🔒 偵測到填寫完整且雙方已簽名，已自動進入上鎖保護模式 (預設密碼: ${defPwd})`, 'success');
           }
         }
 

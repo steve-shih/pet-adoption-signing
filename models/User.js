@@ -8,6 +8,7 @@ const UserSchema = new mongoose.Schema({
   email: { type: String },
   address: { type: String },
   role: { type: String, default: 'user' }, // admin, user
+  defaultContractPassword: { type: String, default: '00000' }, // 每個用戶專屬的合約預設密碼
   createdAt: { type: Date, default: Date.now }
 });
 
