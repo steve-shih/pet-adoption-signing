@@ -107,10 +107,17 @@ app.post('/api/auth/register', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
   try {
     if (!isMongoReady) return res.status(503).json({ success: false, message: '資料庫未連接' });
-    const { username, password } = req.body;
-    const user = await User.findOne({ username });
+    let { username, password } = req.body;
+    if (username) username = username.trim();
+    if (password) password = password.trim();
+    
+    // 使用不區分大小寫的搜尋方式尋找帳號
+    const user = await User.findOne({ 
+      username: { $regex: new RegExp('^' + username + '$', 'i') } 
+    });
+
     if (!user || user.password !== Buffer.from(password).toString('base64')) {
-      return res.status(400).json({ success: false, message: '帳號或密碼錯誤' });
+      return res.status(400).json({ success: false, message: '帳號或密碼錯誤（提示：請檢查大小寫與有無空格）' });
     }
     // 返回基本資訊 (包含權限與用戶 ID)
     res.json({ success: true, user: { id: user._id, fullName: user.fullName, role: user.role } });
