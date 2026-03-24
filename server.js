@@ -13,6 +13,11 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/pet-adoption';
 
+// 🛠️ 基礎中間件 (必須放在最前面)
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(fileUpload());
+
 let isMongoReady = false;
 
 // 🔐 Auth Middleware (基於 Header 的簡單驗證，方便前端介接)
@@ -53,10 +58,66 @@ async function initDefaultUser() {
   } catch (e) { console.error('初始化帳號失敗:', e); }
 }
 
-// Middleware
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(fileUpload());
+// Connect to MongoDB (With Fallback Support)
+mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
+  .then(() => {
+    isMongoReady = true;
+    console.log('✅ MongoDB 連線成功 (切換至資料庫模式)');
+    initDefaultUser();
+  })
+  .catch(err => {
+    isMongoReady = false;
+    console.warn('⚠️ MongoDB 連線失敗 (切換至本地模式)：', err.message);
+  });
+
+// --------------------------------------------------------------------------
+// 🔐 Auth API (MUST be before static files to avoid conflicts)
+// --------------------------------------------------------------------------
+
+// 登入
+app.post('/api/auth/login', async (req, res) => {
+  console.log(`[AUTH] 收到登入請求: ${req.body ? req.body.username : '無資料'}`);
+  try {
+    if (!isMongoReady) return res.status(503).json({ success: false, message: '資料庫未連接' });
+    let { username, password } = req.body;
+    if (username) username = username.trim();
+    if (password) password = password.trim();
+    
+    const user = await User.findOne({ 
+      username: { $regex: new RegExp('^' + username + '$', 'i') } 
+    });
+
+    if (!user || user.password !== Buffer.from(password).toString('base64')) {
+      return res.status(400).json({ success: false, message: '帳號或密碼錯誤（提示：請檢查大小寫與有無空格）' });
+    }
+    
+    console.log(`[AUTH] 登入成功: ${user.username}`);
+    res.json({ success: true, user: { id: user._id, fullName: user.fullName, role: user.role } });
+  } catch (e) { 
+    console.error('[AUTH] 登入異常Error:', e);
+    res.status(500).json({ success: false, message: '登入失敗' }); 
+  }
+});
+
+// 註冊
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    if (!isMongoReady) return res.status(503).json({ success: false, message: '離線模式不支援帳號管理' });
+    const { username, password, fullName, phone, email, address } = req.body;
+    const exists = await User.findOne({ username });
+    if (exists) return res.status(400).json({ success: false, message: '此帳號已存在' });
+
+    const newUser = new User({
+      username,
+      password: Buffer.from(password).toString('base64'),
+      fullName, phone, email, address
+    });
+    await newUser.save();
+    res.json({ success: true, message: '註冊成功！' });
+  } catch (e) { res.status(500).json({ success: false, message: '註冊系統異常' }); }
+});
+
+// 靜態檔案
 app.use(express.static('public'));
 
 // Data directory (still used for snapshots and legacy local signatures)
