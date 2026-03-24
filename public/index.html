@@ -1304,6 +1304,26 @@
       try {
         const formData = getFormData();
 
+        // 🟢 自動上鎖邏輯：雙方都簽名且欄位填滿
+        if (!formData.isProtected) {
+          const isFull = (
+            formData.giverName && formData.giverId &&
+            formData.adopterName && formData.adopterId &&
+            formData.petBreed && formData.catChip &&
+            formData.adoptionDate &&
+            formData.amount && (formData.amount !== '請輸入認養金額' && formData.amount !== '') &&
+            formData.giverSignatureDataUrl && formData.adopterSignatureDataUrl
+          );
+          if (isFull) {
+            formData.isProtected = true;
+            formData.contractPassword = '000000';
+            // 同步更新 UI
+            document.getElementById('isProtectedField').checked = true;
+            document.getElementById('contractPasswordField').value = '000000';
+            showAlert('🔒 偵測到填寫完整且雙方已簽名，已自動進入上鎖保護模式 (預設密碼: 000000)', 'success');
+          }
+        }
+
         if (!currentFolder) {
           const resp = await fetch('/api/contracts', {
             method: 'POST',

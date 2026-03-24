@@ -53,19 +53,32 @@ function generateContractFolderName(formData) {
 }
 
 /**
- * Save signature to local filesystem (for backup/compatibility)
+ * Save signature to local filesystem (支援歷史版本備份)
  */
 function saveSignatureToLocal(folderName, base64Data, filename) {
   try {
     const contractDir = path.join(CONTRACTS_DIR, folderName);
+    const historyDir = path.join(contractDir, 'history');
     if (!fs.existsSync(contractDir)) fs.mkdirSync(contractDir, { recursive: true });
 
-    const base64String = base64Data.replace(/^data:image\/\w+;base64,/, '');
     const filepath = path.join(contractDir, filename);
+
+    // 1. 如果舊簽名已存在，先將其移入 history 子資料夾
+    if (fs.existsSync(filepath)) {
+      if (!fs.existsSync(historyDir)) fs.mkdirSync(historyDir, { recursive: true });
+      const now = new Date();
+      // 使用更精簡的時間戳記：時分秒-毫秒
+      const ts = `${now.getHours()}${now.getMinutes()}${now.getSeconds()}-${now.getMilliseconds()}`;
+      const backupName = filename.replace('.png', `_deleted_${ts}.png`);
+      fs.renameSync(filepath, path.join(historyDir, backupName));
+    }
+
+    // 2. 儲存新簽名到根目錄
+    const base64String = base64Data.replace(/^data:image\/\w+;base64,/, '');
     fs.writeFileSync(filepath, Buffer.from(base64String, 'base64'));
     return true;
   } catch (e) {
-    console.error('保存簽名到本地失敗:', e);
+    console.error('保存簽名與記錄歷史失敗:', e);
     return false;
   }
 }
