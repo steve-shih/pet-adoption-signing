@@ -198,6 +198,60 @@
       box-shadow: 0 4px 12px var(--shadow-color);
     }
 
+    /* Auth Overlay */
+    #authOverlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(45, 35, 40, 0.88);
+      backdrop-filter: blur(8px);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .auth-card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    }
+
+    .auth-tabs {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+      border-bottom: 2px solid #f0f0f0;
+    }
+
+    .auth-tab {
+      padding: 10px 20px;
+      cursor: pointer;
+      font-weight: 700;
+      color: #999;
+    }
+
+    .auth-tab.active {
+      color: var(--primary-dark-color);
+      border-bottom: 2px solid var(--primary-dark-color);
+      margin-bottom: -2px;
+    }
+
+    .user-tag {
+      font-size: 11px;
+      background: #fdf2f5;
+      color: var(--primary-dark-color);
+      padding: 4px 8px;
+      border-radius: 6px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
     .button-primary {
       background: linear-gradient(135deg, #f39ab4, #f7b77a);
       color: #fff;
@@ -668,17 +722,109 @@
     </div>
   </div>
 
+  <!-- Profile Editor Modal -->
+  <div id="profileModal" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+      <div class="modal-header">
+        <h2>⚙️ 編輯個人及帳號資訊</h2>
+        <span class="close" onclick="closeModal('profileModal')">&times;</span>
+      </div>
+      <div class="info-grid">
+        <div class="info-card">
+          <label class="label">全名 / 名稱</label>
+          <input type="text" id="editFullName" class="input">
+        </div>
+        <div class="info-card">
+          <label class="label">變更密碼 (留空代表不更動)</label>
+          <input type="password" id="editPass" class="input">
+        </div>
+        <div class="info-card">
+          <label class="label">手機號碼</label>
+          <input type="text" id="editPhone" class="input">
+        </div>
+        <div class="info-card">
+          <label class="label">Email</label>
+          <input type="text" id="editEmail" class="input">
+        </div>
+        <div class="info-card" style="grid-column: span 2;">
+          <label class="label">聯絡地址</label>
+          <input type="text" id="editAddress" class="input">
+        </div>
+      </div>
+      <div style="margin-top: 20px; text-align: right;">
+        <button class="button button-secondary" onclick="closeModal('profileModal')">取消</button>
+        <button class="button button-primary" style="min-width: 120px;" onclick="handleSaveProfile()">💾 儲存修改</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Auth Overlay -->
+  <div id="authOverlay" style="display: none;">
+    <div class="auth-card">
+      <div class="auth-tabs">
+        <div class="auth-tab active" id="tabLogin" onclick="showAuthTab('login')">登入</div>
+        <div class="auth-tab" id="tabRegister" onclick="showAuthTab('register')">註冊帳號</div>
+      </div>
+      
+      <!-- Login -->
+      <div id="loginSection">
+        <div class="info-card" style="margin-bottom: 12px;">
+          <label class="label">帳號 (Username)</label>
+          <input type="text" id="loginUser" class="input" placeholder="例如: A0001">
+        </div>
+        <div class="info-card" style="margin-bottom: 20px;">
+          <label class="label">密碼 (Password)</label>
+          <input type="password" id="loginPass" class="input" placeholder="請輸入密碼">
+        </div>
+        <button class="button button-primary" style="width: 100%; padding: 14px;" onclick="handleLogin()">🚀 立即登入</button>
+      </div>
+
+      <!-- Register -->
+      <div id="registerSection" style="display: none;">
+        <div class="info-grid">
+          <div class="info-card">
+            <label class="label">帳號 (ID)</label>
+            <input type="text" id="regUser" class="input">
+          </div>
+          <div class="info-card">
+            <label class="label">全名 (如貓舍名稱)</label>
+            <input type="text" id="regFullName" class="input">
+          </div>
+          <div class="info-card">
+            <label class="label">密碼</label>
+            <input type="password" id="regPass" class="input">
+          </div>
+          <div class="info-card">
+            <label class="label">手機號碼</label>
+            <input type="text" id="regPhone" class="input">
+          </div>
+          <div class="info-card">
+            <label class="label">Email</label>
+            <input type="text" id="regEmail" class="input">
+          </div>
+          <div class="info-card">
+            <label class="label">地址</label>
+            <input type="text" id="regAddress" class="input">
+          </div>
+        </div>
+        <button class="button button-primary" style="width: 100%; padding: 14px; margin-top: 20px;" onclick="handleRegister()">✅ 提交註冊</button>
+      </div>
+    </div>
+  </div>
+
   <!-- ========== Main Content ========== -->
   <div class="page" id="mainPage" style="display:none;">
     <div class="toolbar">
+      <div id="userInfoBlock" style="display: flex; align-items: center; gap: 8px; margin-right: auto; flex-wrap: wrap;">
+        <div class="user-tag">👤 <span id="displayUserName">載入中...</span></div>
+        <button class="button" style="padding: 4px 8px; font-size: 11px; flex: 0;" onclick="showProfileEditor()">⚙️ 編輯資訊</button>
+        <button class="button" style="padding: 4px 8px; font-size: 11px; flex: 0; background: #fff0f0;" onclick="handleLogout()">🚪 登出</button>
+      </div>
       <button class="button button-primary" onclick="forceSave()">💾 保存</button>
       <button class="button button-secondary" onclick="showContractSelector()">📂 切換合約</button>
-      <button class="button button-danger" id="btnDeleteMain" style="display:none;"
-        onclick="deleteCurrentContract()">🗑️ 刪除合約</button>
-      <button class="button" style="background: #a8e6cf; color: #2d4a53; border-color: #a8e6cf;"
-        onclick="shareContractLink()">🔗 分享連結</button>
-      <button class="button button-secondary" id="btnToggleTypeMain" style="display:none;"
-        onclick="toggleContractType()">📑 切換類型</button>
+      <button class="button button-danger" id="btnDeleteMain" style="display:none;" onclick="deleteCurrentContract()">🗑️ 刪除合約</button>
+      <button class="button" style="background: #a8e6cf; color: #2d4a53; border-color: #a8e6cf;" onclick="shareContractLink()">🔗 分享連結</button>
+      <button class="button button-secondary" id="btnToggleTypeMain" style="display:none;" onclick="toggleContractType()">📑 切換類型</button>
       <button class="button button-primary" onclick="downloadContractImage()">📸 下載圖片</button>
     </div>
 
@@ -812,11 +958,135 @@
   </div>
 
   <script>
+    let currentUser = null;
+    let isAdmin = false;
+
+    // 🌐 API 調用封裝 (自動附帶 Auth Header)
+    async function apiFetch(url, options = {}) {
+      if (!options.headers) options.headers = {};
+      if (currentUser) options.headers['x-user-id'] = currentUser.id;
+      
+      try {
+        const resp = await fetch(url, options);
+        if (resp.status === 401) {
+          handleLogout(); 
+          return null;
+        }
+        return resp;
+      } catch (err) {
+        console.error('API Error:', err);
+        return null;
+      }
+    }
+
+    async function checkAuth() {
+      const saved = localStorage.getItem('petAuthUser');
+      if (saved) {
+        currentUser = JSON.parse(saved);
+        isAdmin = (currentUser.role === 'admin');
+        document.getElementById('displayUserName').textContent = currentUser.fullName;
+        document.getElementById('authOverlay').style.display = 'none';
+        document.getElementById('mainPage').style.display = 'block';
+        return true;
+      } else {
+        document.getElementById('authOverlay').style.display = 'flex';
+        document.getElementById('mainPage').style.display = 'none';
+        return false;
+      }
+    }
+
+    function showAuthTab(type) {
+      document.getElementById('loginSection').style.display = (type === 'login' ? 'block' : 'none');
+      document.getElementById('registerSection').style.display = (type === 'register' ? 'block' : 'none');
+      document.getElementById('tabLogin').classList.toggle('active', type === 'login');
+      document.getElementById('tabRegister').classList.toggle('active', type === 'register');
+    }
+
+    async function handleLogin() {
+      const username = document.getElementById('loginUser').value;
+      const password = document.getElementById('loginPass').value;
+      if (!username || !password) return alert('請輸入帳號密碼');
+      
+      const resp = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+      });
+      const result = await resp.json();
+      if (!result.success) return alert('❌ ' + result.message);
+      
+      localStorage.setItem('petAuthUser', JSON.stringify(result.user));
+      location.reload();
+    }
+
+    async function handleRegister() {
+      const data = {
+        username: document.getElementById('regUser').value,
+        fullName: document.getElementById('regFullName').value,
+        password: document.getElementById('regPass').value,
+        phone: document.getElementById('regPhone').value,
+        email: document.getElementById('regEmail').value,
+        address: document.getElementById('regAddress').value
+      };
+      if (!data.username || !data.password) return alert('帳號密碼為必填');
+      
+      const resp = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await resp.json();
+      alert(result.message);
+      if (result.success) showAuthTab('login');
+    }
+
+    function handleLogout() {
+      localStorage.removeItem('petAuthUser');
+      location.reload();
+    }
+
+    async function showProfileEditor() {
+      const resp = await apiFetch('/api/auth/profile');
+      if (!resp) return;
+      const result = await resp.json();
+      const user = result.user;
+      
+      document.getElementById('editFullName').value = user.fullName;
+      document.getElementById('editPhone').value = user.phone || '';
+      document.getElementById('editEmail').value = user.email || '';
+      document.getElementById('editAddress').value = user.address || '';
+      document.getElementById('editPass').value = '';
+      openModal('profileModal');
+    }
+
+    async function handleSaveProfile() {
+      const data = {
+        fullName: document.getElementById('editFullName').value,
+        phone: document.getElementById('editPhone').value,
+        email: document.getElementById('editEmail').value,
+        address: document.getElementById('editAddress').value
+      };
+      const newPass = document.getElementById('editPass').value;
+      if (newPass) data.password = newPass;
+
+      const resp = await apiFetch('/api/auth/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+      });
+      const result = await resp.json();
+      if (result.success) {
+        alert('✅ 修改成功，請重新登入');
+        handleLogout();
+      } else {
+        alert('❌ 修改失敗');
+      }
+    }
+
     // ========== State ==========
     let currentFolder = null;
     let autoSaveTimer = null;
     let currentContractType = '送養合約';
-    let isAdmin = false;
 
     const signatureCanvases = {
       giver: document.getElementById('giverSign'),
@@ -1137,9 +1407,9 @@
     // ========== Contract Selector ==========
     async function loadContractList() {
       try {
-        const resp = await fetch('/api/contracts');
+        const resp = await apiFetch('/api/contracts');
+        if (!resp) return [];
         const result = await resp.json();
-        if (!result.success) throw new Error(result.message);
         return result.data || [];
       } catch (err) {
         console.error('載入合約列表失敗', err);
@@ -1191,10 +1461,9 @@
       const listEl = document.getElementById('snapshotList');
       listEl.innerHTML = '<div class="no-contracts">讀取中...</div>';
       try {
-        const resp = await fetch('/api/snapshots');
+        const resp = await apiFetch('/api/snapshots');
+        if (!resp) return;
         const result = await resp.json();
-        if (!result.success) throw new Error(result.message);
-
         const snapshots = result.data || [];
         if (snapshots.length === 0) {
           listEl.innerHTML = '<div class="no-contracts">📸 目前尚無存檔紀錄。</div>';
@@ -1209,7 +1478,7 @@
           </div>`).join('');
         }
       } catch (err) {
-        listEl.innerHTML = '<div class="no-contracts">❌ 載入失敗：' + err.message + '</div>';
+        listEl.innerHTML = '<div class="no-contracts">❌ 載入失敗</div>';
       }
     }
 
@@ -1217,7 +1486,7 @@
       try {
         const canvas = await html2canvas(document.getElementById('contract'), { scale: 1.5, useCORS: true, backgroundColor: '#fffaf5' });
         const image = canvas.toDataURL('image/png');
-        await fetch('/api/snapshots', {
+        await apiFetch('/api/snapshots', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ image, folder: currentFolder })
@@ -1244,10 +1513,9 @@
     // ========== Contract Operations ==========
     async function openContract(folder, isProtected) {
       try {
-        const resp = await fetch(`/api/contracts/${encodeURIComponent(folder)}`);
+        const resp = await apiFetch(`/api/contracts/${encodeURIComponent(folder)}`);
+        if (!resp) return;
         const result = await resp.json();
-        if (!result.success) throw new Error(result.message);
-
         const savedData = result.data;
 
         // Password verification if protected
@@ -1325,7 +1593,7 @@
         }
 
         if (!currentFolder) {
-          const resp = await fetch('/api/contracts', {
+          const resp = await apiFetch('/api/contracts', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(formData),
@@ -1335,9 +1603,9 @@
           currentFolder = result.folder;
           updateContractLabel();
           updateSaveStatus('✅ 已建立並儲存', 'saved');
-          takeSnapshotToServer(); // Capture when created
+          takeSnapshotToServer();
         } else {
-          const resp = await fetch(`/api/contracts/${encodeURIComponent(currentFolder)}`, {
+          const resp = await apiFetch(`/api/contracts/${encodeURIComponent(currentFolder)}`, {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(formData),
@@ -1345,10 +1613,6 @@
           const result = await resp.json();
           if (!result.success) throw new Error(result.message);
           updateSaveStatus('✅ 已自動儲存', 'saved');
-          // No auto-snapshot to avoid frequency, or only on manual save? 
-          // User said "每次存檔", but auto-save triggers often.
-          // Let's only snapshot on forceSave() and specific intervals or every time as requested.
-          // To follow "每次存檔" literally:
           takeSnapshotToServer();
         }
       } catch (err) {
@@ -1524,14 +1788,18 @@
       Object.keys(signatureCanvases).forEach(st => prepareCanvas(st));
     });
 
-    // Show contract selector or load from URL id
-    const urlParams = new URLSearchParams(window.location.search);
-    const id = urlParams.get('id') || urlParams.get('folder');
-    if (id) {
-      openContract(decodeURIComponent(id));
-    } else {
-      showContractSelector();
-    }
+    // 🏆 初始化：檢查登入狀態
+    checkAuth().then(isLoggedIn => {
+      if (isLoggedIn) {
+        const urlParams = new URLSearchParams(window.location.search);
+        const id = urlParams.get('id') || urlParams.get('folder');
+        if (id) {
+          openContract(decodeURIComponent(id));
+        } else {
+          showContractSelector();
+        }
+      }
+    });
   </script>
 </body>
 

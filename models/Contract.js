@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const contractSchema = new mongoose.Schema({
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // 誰的合約
     folderName: { type: String, unique: true }, // The original folder name like '{Name}_{Name}_{Date}'
     contractType: String,
     isProtected: Boolean,

@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 
 const snapshotSchema = new mongoose.Schema({
+    ownerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // 誰的快照
     folderName: { type: String, required: true }, // 對應的合約名稱 (giver_adopter_ts)
     filename: { type: String, required: true },   // 本地檔名
     localPath: String,                            // 本地完整路徑 (備用)

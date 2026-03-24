@@ -7,12 +7,51 @@ const fs = require('fs');
 const mongoose = require('mongoose');
 const Contract = require('./models/Contract');
 const Snapshot = require('./models/Snapshot');
+const User = require('./models/User');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/pet-adoption';
 
 let isMongoReady = false;
+
+// 🔐 Auth Middleware (基於 Header 的簡單驗證，方便前端介接)
+async function auth(req, res, next) {
+  if (!isMongoReady) {
+    // 若無 DB 模式，暫時跳過驗證 (僅限開發)
+    req.user = { _id: '000000000000000000000000', role: 'admin', fullName: '開發者' };
+    return next();
+  }
+  const userId = req.headers['x-user-id'];
+  if (!userId) return res.status(401).json({ success: false, message: '請登入後再操作' });
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(401).json({ success: false, message: '連線逾時，請重新登入' });
+    req.user = user;
+    next();
+  } catch (e) { res.status(401).json({ success: false, message: '驗證失敗' }); }
+}
+
+// 👤 初始化預設帳號 A0001
+async function initDefaultUser() {
+  if (!isMongoReady) return;
+  try {
+    const exists = await User.findOne({ username: 'A0001' });
+    if (!exists) {
+      const newUser = new User({
+        username: 'A0001',
+        password: Buffer.from('steve91218457').toString('base64'),
+        fullName: '創養軟體整合工作室',
+        role: 'admin',
+        phone: '0900000000',
+        email: 'steve@example.com',
+        address: '台灣'
+      });
+      await newUser.save();
+      console.log('👤 初始帳號已就緒：A0001 / steve91218457');
+    }
+  } catch (e) { console.error('初始化帳號失敗:', e); }
+}
 
 // Middleware
 app.use(cors());
@@ -35,11 +74,65 @@ mongoose.connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
   .then(() => {
     isMongoReady = true;
     console.log('✅ MongoDB 連線成功 (切換至資料庫模式)');
+    initDefaultUser(); // 啟動並檢查預設帳號
   })
   .catch(err => {
     isMongoReady = false;
     console.warn('⚠️ MongoDB 連線失敗 (切換至本地檔案模式)：', err.message);
   });
+
+// --------------------------------------------------------------------------
+// 🔐 Auth API 
+// --------------------------------------------------------------------------
+
+// 註冊
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    if (!isMongoReady) return res.status(503).json({ success: false, message: '離線模式不支援帳號管理' });
+    const { username, password, fullName, phone, email, address } = req.body;
+    const exists = await User.findOne({ username });
+    if (exists) return res.status(400).json({ success: false, message: '此帳號已存在' });
+
+    const newUser = new User({
+      username,
+      password: Buffer.from(password).toString('base64'),
+      fullName, phone, email, address
+    });
+    await newUser.save();
+    res.json({ success: true, message: '註冊成功！' });
+  } catch (e) { res.status(500).json({ success: false, message: '註冊系統異常' }); }
+});
+
+// 登入
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    if (!isMongoReady) return res.status(503).json({ success: false, message: '資料庫未連接' });
+    const { username, password } = req.body;
+    const user = await User.findOne({ username });
+    if (!user || user.password !== Buffer.from(password).toString('base64')) {
+      return res.status(400).json({ success: false, message: '帳號或密碼錯誤' });
+    }
+    // 返回基本資訊 (包含權限與用戶 ID)
+    res.json({ success: true, user: { id: user._id, fullName: user.fullName, role: user.role } });
+  } catch (e) { res.status(500).json({ success: false, message: '登入失敗' }); }
+});
+
+// 查看個人資料
+app.get('/api/auth/profile', auth, (req, res) => {
+  res.json({ success: true, user: req.user });
+});
+
+// 修改個人資料
+app.put('/api/auth/profile', auth, async (req, res) => {
+  try {
+    const { password, fullName, phone, email, address } = req.body;
+    const updates = { fullName, phone, email, address };
+    if (password) updates.password = Buffer.from(password).toString('base64');
+    
+    await User.findByIdAndUpdate(req.user._id, updates);
+    res.json({ success: true, message: '資訊已更新' });
+  } catch (e) { res.status(500).json({ success: false, message: '更新失敗' }); }
+});
 
 /**
  * Generate a folder name for legacy file support
@@ -95,10 +188,16 @@ app.get('/api/ping', (req, res) => {
 /**
  * GET /api/contracts - 讀取列表 (支援 DB/Local 混合轉發)
  */
-app.get('/api/contracts', async (req, res) => {
+app.get('/api/contracts', auth, async (req, res) => {
   try {
     if (isMongoReady) {
-      const contracts = await Contract.find({ valid: true })
+      const query = { valid: true };
+      // 管理員可以看到全部，一般用戶只能看到自己的
+      if (req.user.role !== 'admin') {
+        query.ownerId = req.user._id;
+      }
+
+      const contracts = await Contract.find(query)
         .select('folderName giverName adopterName contractType adoptionDate timestamp isProtected')
         .sort({ timestamp: -1 });
 
@@ -114,7 +213,7 @@ app.get('/api/contracts', async (req, res) => {
       return res.json({ success: true, data, mode: 'mongodb' });
     }
 
-    // Fallback: 純檔案讀取
+    // Fallback: 純檔案讀取 (本地模式暫不支援深入隔離)
     const folders = fs.readdirSync(CONTRACTS_DIR)
       .filter(f => fs.statSync(path.join(CONTRACTS_DIR, f)).isDirectory());
 
@@ -123,7 +222,7 @@ app.get('/api/contracts', async (req, res) => {
         const jsonPath = path.join(CONTRACTS_DIR, f, 'contract.json');
         if (!fs.existsSync(jsonPath)) return null;
         const info = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-        if (info.valid === false) return null; // 過濾掉已刪除
+        if (info.valid === false) return null;
         return {
           folder: f,
           giverName: info.giverName,
@@ -138,18 +237,21 @@ app.get('/api/contracts', async (req, res) => {
 
     res.json({ success: true, data, mode: 'local' });
   } catch (err) {
-    res.status(500).json({ success: false, message: '讀取列表失敗：' + err.message });
+    res.status(500).json({ success: false, message: '讀取列表失敗' });
   }
 });
 
 /**
  * GET /api/contracts/:folder - 讀取指定合約
  */
-app.get('/api/contracts/:folder', async (req, res) => {
+app.get('/api/contracts/:folder', auth, async (req, res) => {
   try {
     const folderName = req.params.folder;
     if (isMongoReady) {
-      const contract = await Contract.findOne({ folderName });
+      const query = { folderName };
+      if (req.user.role !== 'admin') query.ownerId = req.user._id;
+      
+      const contract = await Contract.findOne(query);
       if (contract) return res.json({ success: true, data: contract, folder: folderName });
     }
 
@@ -169,9 +271,10 @@ app.get('/api/contracts/:folder', async (req, res) => {
 /**
  * POST /api/contracts - 建立新合約
  */
-app.post('/api/contracts', async (req, res) => {
+app.post('/api/contracts', auth, async (req, res) => {
   try {
     const formData = req.body || {};
+    formData.ownerId = req.user._id; // 綁定擁有者
     const folderNameBase = generateContractFolderName(formData);
 
     // 取得唯一資料夾名稱
@@ -190,7 +293,7 @@ app.post('/api/contracts', async (req, res) => {
     formData.folderName = folderName;
     formData.timestamp = new Date();
 
-    // 1. 備份到本地檔案系統 (不管是哪種模式都存一份作為雙重備份)
+    // 1. 備份到本地檔案系統
     const contractDir = path.join(CONTRACTS_DIR, folderName);
     if (!fs.existsSync(contractDir)) fs.mkdirSync(contractDir, { recursive: true });
     fs.writeFileSync(path.join(contractDir, 'contract.json'), JSON.stringify(formData, null, 2));
@@ -204,23 +307,36 @@ app.post('/api/contracts', async (req, res) => {
       await newContract.save();
     }
 
-    res.json({ success: true, message: isMongoReady ? '新合約已建立 (MongoDB)' : '新合約已建立 (本地檔案)', folder: folderName });
+    res.json({ success: true, message: isMongoReady ? '新合約已建立 (MongoDB)' : '新合約已建立 (本地模式)', folder: folderName });
   } catch (err) {
     console.error('建立失敗:', err);
-    res.status(500).json({ success: false, message: '建立失敗：' + err.message });
+    res.status(500).json({ success: false, message: '建立失敗' });
   }
 });
 
 /**
  * PUT /api/contracts/:folder - 更新合約
  */
-app.put('/api/contracts/:folder', async (req, res) => {
+app.put('/api/contracts/:folder', auth, async (req, res) => {
   try {
     const folder = req.params.folder;
     const formData = req.body;
     formData.timestamp = new Date();
 
-    // 1. 更新本地檔案 (雙重備份)
+    // 1. 更新 MongoDB (先做，因為有權限校驗)
+    if (isMongoReady) {
+      const query = { folderName: folder };
+      if (req.user.role !== 'admin') query.ownerId = req.user._id;
+
+      const contract = await Contract.findOneAndUpdate(
+        query,
+        { $set: formData },
+        { new: true }
+      );
+      if (!contract) return res.status(404).json({ success: false, message: '找不到合約或無編輯權限' });
+    }
+
+    // 2. 更新本地檔案
     const jsonPath = path.join(CONTRACTS_DIR, folder, 'contract.json');
     if (fs.existsSync(jsonPath)) {
       const currentData = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
@@ -230,16 +346,6 @@ app.put('/api/contracts/:folder', async (req, res) => {
 
     if (formData.giverSignatureDataUrl) saveSignatureToLocal(folder, formData.giverSignatureDataUrl, 'signature_donor.png');
     if (formData.adopterSignatureDataUrl) saveSignatureToLocal(folder, formData.adopterSignatureDataUrl, 'signature_adopter.png');
-
-    // 2. 更新 MongoDB
-    if (isMongoReady) {
-      const contract = await Contract.findOneAndUpdate(
-        { folderName: folder },
-        { $set: formData },
-        { new: true }
-      );
-      if (!contract) return res.status(404).json({ success: false, message: '資料庫中找不到合約' });
-    }
 
     res.json({ success: true, message: '合約已更新', folder });
   } catch (err) {
@@ -251,26 +357,29 @@ app.put('/api/contracts/:folder', async (req, res) => {
 /**
  * POST /api/contracts/:folder/rename - 重命名合約 (改名連結 ID)
  */
-app.post('/api/contracts/:folder/rename', async (req, res) => {
+app.post('/api/contracts/:folder/rename', auth, async (req, res) => {
   try {
     const oldName = req.params.folder;
     const { newName: rawNewName } = req.body;
     if (!rawNewName) return res.status(400).json({ success: false, message: '缺少新名稱' });
 
-    // 清洗檔名防止噴錯
+    // 1. 檢查舊合約權限
+    if (isMongoReady) {
+      const query = { folderName: oldName };
+      if (req.user.role !== 'admin') query.ownerId = req.user._id;
+      const contract = await Contract.findOne(query);
+      if (!contract) return res.status(404).json({ success: false, message: '找不到合約或無重命名權限' });
+    }
+
     const newName = rawNewName.replace(/[\\/:*?"<>|]/g, '_');
-    
-    // 1. 檢查新名稱是否已存在 (DB & Local)
     const oldDirPath = path.join(CONTRACTS_DIR, oldName);
     const newDirPath = path.join(CONTRACTS_DIR, newName);
     
     if (isMongoReady) {
       const exists = await Contract.findOne({ folderName: newName });
-      if (exists) return res.status(400).json({ success: false, message: '此名稱在資料庫已存在' });
+      if (exists) return res.status(400).json({ success: false, message: '此名稱已存在' });
     }
-    if (fs.existsSync(newDirPath)) {
-      return res.status(400).json({ success: false, message: '此名稱在檔案系統已存在' });
-    }
+    if (fs.existsSync(newDirPath)) return res.status(400).json({ success: false, message: '路徑已存在' });
 
     // 2. 更新 MongoDB
     if (isMongoReady) {
@@ -278,23 +387,21 @@ app.post('/api/contracts/:folder/rename', async (req, res) => {
       await Snapshot.updateMany({ folderName: oldName }, { folderName: newName });
     }
 
-    // 3. 實體檔案系統改名
+    // 3. 實體改名
     if (fs.existsSync(oldDirPath)) {
       fs.renameSync(oldDirPath, newDirPath);
-      // 更新資料夾內的 contract.json
       const jsonPath = path.join(newDirPath, 'contract.json');
       if (fs.existsSync(jsonPath)) {
         try {
           const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
           data.folderName = newName;
           fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2));
-        } catch (e) { console.error('更新本地 JSON 失敗', e); }
+        } catch (e) {}
       }
     }
 
-    res.json({ success: true, message: '合約已成功重命名', folder: newName });
+    res.json({ success: true, message: '合約已更名', folder: newName });
   } catch (err) {
-    console.error('重命名失敗:', err);
     res.status(500).json({ success: false, message: '重命名失敗' });
   }
 });
@@ -302,26 +409,31 @@ app.post('/api/contracts/:folder/rename', async (req, res) => {
 /**
  * DELETE /api/contracts/:folder - 軟刪除
  */
-app.delete('/api/contracts/:folder', async (req, res) => {
+app.delete('/api/contracts/:folder', auth, async (req, res) => {
   try {
     const folder = req.params.folder;
     const now = new Date();
 
-    // 1. 本地軟刪除
-    const jsonPath = path.join(CONTRACTS_DIR, folder, 'contract.json');
-    if (fs.existsSync(jsonPath)) {
-      const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
-      data.valid = false;
-      data.deletedAt = now;
-      fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2));
-    }
-
-    // 2. MongoDB 軟刪除
+    // 1. MongoDB 軟刪除 (先檢查權限)
     if (isMongoReady) {
-      await Contract.findOneAndUpdate(
-        { folderName: folder },
+      const query = { folderName: folder };
+      if (req.user.role !== 'admin') query.ownerId = req.user._id;
+      const contract = await Contract.findOneAndUpdate(
+        query,
         { $set: { valid: false, deletedAt: now } }
       );
+      if (!contract) return res.status(404).json({ success: false, message: '找不到合約或無刪除權限' });
+    }
+
+    // 2. 本地軟刪除
+    const jsonPath = path.join(CONTRACTS_DIR, folder, 'contract.json');
+    if (fs.existsSync(jsonPath)) {
+      try {
+        const data = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+        data.valid = false;
+        data.deletedAt = now;
+        fs.writeFileSync(jsonPath, JSON.stringify(data, null, 2));
+      } catch (e) {}
     }
 
     res.json({ success: true, message: '合約已標記為刪除' });
@@ -333,7 +445,7 @@ app.delete('/api/contracts/:folder', async (req, res) => {
 /**
  * POST /api/snapshots - 儲存截圖
  */
-app.post('/api/snapshots', async (req, res) => {
+app.post('/api/snapshots', auth, async (req, res) => {
   try {
     const { image, folder } = req.body;
     if (!image) return res.status(400).json({ success: false, message: '缺少圖片資料' });
@@ -352,6 +464,7 @@ app.post('/api/snapshots', async (req, res) => {
     let dbId = null;
     if (isMongoReady) {
       const newSnapshot = new Snapshot({
+        ownerId: req.user._id,
         folderName: folder || 'unknown',
         filename: filename,
         localPath: filepath,
@@ -371,10 +484,13 @@ app.post('/api/snapshots', async (req, res) => {
 /**
  * GET /api/snapshots
  */
-app.get('/api/snapshots', async (req, res) => {
+app.get('/api/snapshots', auth, async (req, res) => {
   try {
     if (isMongoReady) {
-      const snapshots = await Snapshot.find().sort({ timestamp: -1 });
+      const query = {};
+      if (req.user.role !== 'admin') query.ownerId = req.user._id;
+
+      const snapshots = await Snapshot.find(query).sort({ timestamp: -1 });
       const data = snapshots.map(s => ({
         id: s._id,
         filename: s.filename,
@@ -385,7 +501,7 @@ app.get('/api/snapshots', async (req, res) => {
       return res.json({ success: true, data, mode: 'mongodb' });
     }
 
-    // Fallback: 掃描硬碟
+    // Fallback: 掃描硬碟 (本地模式暫不支援深入隔離)
     if (!fs.existsSync(SNAPSHOTS_DIR)) return res.json({ success: true, data: [] });
     const files = fs.readdirSync(SNAPSHOTS_DIR)
       .filter(f => f.endsWith('.png'))
