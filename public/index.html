@@ -984,6 +984,7 @@
       if (saved) {
         currentUser = JSON.parse(saved);
         isAdmin = (currentUser.role === 'admin');
+        updateAdminUI();
         document.getElementById('displayUserName').textContent = currentUser.fullName;
         document.getElementById('authOverlay').style.display = 'none';
         document.getElementById('mainPage').style.display = 'block';
@@ -1371,6 +1372,12 @@
     let skipAdminCheck = false;
 
     function unlockAdminPrivacy() {
+      if (isAdmin) {
+        document.getElementById('adminPrivacyContent').style.display = 'flex';
+        document.getElementById('adminPrivacyBtn').style.display = 'none';
+        updateAdminUI();
+        return;
+      }
       const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
       if (adminPwd === 'steve91218457') {
         isAdmin = true;
@@ -1636,10 +1643,12 @@
         return;
       }
 
-      const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
-      if (adminPwd !== 'steve91218457') {
-        alert('❌ 管理員密碼錯誤，操作已取消');
-        return;
+      if (!isAdmin) {
+        const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
+        if (adminPwd !== 'steve91218457') {
+          alert('❌ 管理員密碼錯誤，操作已取消');
+          return;
+        }
       }
 
       const input = prompt(`⚠️ 確定要刪除合約「${currentFolder}」嗎？\n\n請輸入「確認刪除」來確認：`);
@@ -1648,7 +1657,8 @@
         return;
       }
       try {
-        const resp = await fetch(`/api/contracts/${encodeURIComponent(currentFolder)}`, { method: 'DELETE' });
+        const resp = await apiFetch(`/api/contracts/${encodeURIComponent(currentFolder)}`, { method: 'DELETE' });
+        if (!resp) return;
         const result = await resp.json();
         if (!result.success) throw new Error(result.message);
         currentFolder = null;
@@ -1661,17 +1671,19 @@
     }
 
     async function deleteContractFromList(folder) {
-      const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
-      if (adminPwd !== 'steve91218457') {
-        alert('❌ 管理員密碼錯誤，操作已取消');
-        return;
+      if (!isAdmin) {
+        const adminPwd = prompt('🛡️ 此操作需要管理員權限\n\n請輸入管理員密碼：');
+        if (adminPwd !== 'steve91218457') {
+          alert('❌ 管理員密碼錯誤，操作已取消');
+          return;
+        }
       }
 
       if (!confirm(`確定要刪除合約「${folder}」嗎？此操作無法恢復！`)) return;
       try {
-        const resp = await fetch(`/api/contracts/${encodeURIComponent(folder)}`, { method: 'DELETE' });
+        const resp = await apiFetch(`/api/contracts/${encodeURIComponent(folder)}`, { method: 'DELETE' });
+        if (!resp) return;
         const result = await resp.json();
-        if (!result.success) throw new Error(result.message);
         if (currentFolder === folder) { currentFolder = null; clearForm(); }
         showContractSelector();
       } catch (err) {
@@ -1752,13 +1764,13 @@
       if (!newName || newName === currentFolder) return;
 
       try {
-        const resp = await fetch(`/api/contracts/${encodeURIComponent(currentFolder)}/rename`, {
+        const resp = await apiFetch(`/api/contracts/${encodeURIComponent(currentFolder)}/rename`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ newName })
         });
+        if (!resp) return;
         const result = await resp.json();
-        if (!result.success) throw new Error(result.message);
 
         currentFolder = result.folder;
         updateContractLabel();
