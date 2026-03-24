@@ -1464,6 +1464,14 @@
     }
 
     // === Snapshot Operations ===
+    // 📅 Helper: 取得日期所在的週次 (ISO)
+    function getWeekNumber(d) {
+      d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+      d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+      const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+      return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+    }
+
     async function loadSnapshotList() {
       const listEl = document.getElementById('snapshotList');
       listEl.innerHTML = '<div class="no-contracts">讀取中...</div>';
@@ -1472,17 +1480,32 @@
         if (!resp) return;
         const result = await resp.json();
         const snapshots = result.data || [];
+        
         if (snapshots.length === 0) {
           listEl.innerHTML = '<div class="no-contracts">📸 目前尚無存檔紀錄。</div>';
         } else {
-          listEl.innerHTML = snapshots.map(s => `
-          <div class="contract-item" onclick="window.open('${s.url}', '_blank')">
-            <div class="contract-item-icon">🖼️</div>
-            <div class="contract-item-info">
-              <div class="contract-item-name">${escapeHtml(s.filename)}</div>
-              <div class="contract-item-meta">🕒 ${new Date(s.timestamp).toLocaleString('zh-TW')}</div>
-            </div>
-          </div>`).join('');
+          // 📦 週次分組
+          const groups = {};
+          snapshots.forEach(s => {
+            const date = new Date(s.timestamp);
+            const weekKey = `${date.getFullYear()}年 第${getWeekNumber(date)}週`;
+            if (!groups[weekKey]) groups[weekKey] = [];
+            groups[weekKey].push(s);
+          });
+
+          let html = '';
+          Object.keys(groups).sort((a, b) => b.localeCompare(a)).forEach(week => {
+            html += `<div class="week-header" style="background:#fdf2f5; padding:8px 12px; border-radius:8px; margin-top:16px; font-weight:800; color:var(--primary-dark-color); font-size:12px; display:flex; align-items:center; gap:6px;">🗓️ ${week}</div>`;
+            html += groups[week].map(s => `
+              <div class="contract-item" style="margin-top:6px;" onclick="window.open('${s.url}', '_blank')">
+                <div class="contract-item-icon">🖼️</div>
+                <div class="contract-item-info">
+                  <div class="contract-item-name">${escapeHtml(s.filename)}</div>
+                  <div class="contract-item-meta">🕒 ${new Date(s.timestamp).toLocaleString('zh-TW')}</div>
+                </div>
+              </div>`).join('');
+          });
+          listEl.innerHTML = html;
         }
       } catch (err) {
         listEl.innerHTML = '<div class="no-contracts">❌ 載入失敗</div>';
