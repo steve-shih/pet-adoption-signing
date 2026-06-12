@@ -998,8 +998,9 @@
       if (!options.headers) options.headers = {};
       if (currentUser) options.headers['x-user-id'] = currentUser.id;
       
+      const targetUrl = url.startsWith('/') ? '.' + url : url;
       try {
-        const resp = await fetch(url, options);
+        const resp = await fetch(targetUrl, options);
         if (resp.status === 401) {
           handleLogout(); 
           return null;
@@ -1040,7 +1041,7 @@
       const password = document.getElementById('loginPass').value.trim();
       if (!username || !password) return alert('請輸入帳號密碼');
       
-      const resp = await fetch('/api/auth/login', {
+      const resp = await fetch('./api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password })
@@ -1063,7 +1064,7 @@
       };
       if (!data.username || !data.password) return alert('帳號密碼為必填');
       
-      const resp = await fetch('/api/auth/register', {
+      const resp = await fetch('./api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(data)
@@ -1367,8 +1368,8 @@
       // 如果有目前載入的資料夾，優先從資料夾載入圖檔 (讓手動換圖生效)
       if (currentFolder) {
         const ts = new Date().getTime(); // 防止快取
-        loadSignatureFromUrl('giver', `/api/files/${encodeURIComponent(currentFolder)}/signature_donor.png?v=${ts}`, savedData.giverSignatureDataUrl);
-        loadSignatureFromUrl('adopter', `/api/files/${encodeURIComponent(currentFolder)}/signature_adopter.png?v=${ts}`, savedData.adopterSignatureDataUrl);
+        loadSignatureFromUrl('giver', `./api/files/${encodeURIComponent(currentFolder)}/signature_donor.png?v=${ts}`, savedData.giverSignatureDataUrl);
+        loadSignatureFromUrl('adopter', `./api/files/${encodeURIComponent(currentFolder)}/signature_adopter.png?v=${ts}`, savedData.adopterSignatureDataUrl);
       } else {
         loadSignatureFromDataUrl('giver', savedData.giverSignatureDataUrl || '');
         loadSignatureFromDataUrl('adopter', savedData.adopterSignatureDataUrl || '');
