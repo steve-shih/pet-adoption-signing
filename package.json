@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
+    "dev:atlas": "cross-env USE_ATLAS=true nodemon server.js",
     "ngrok": "ngrok http 5000",
     "migrate": "node scripts/migrate.js",
     "sync-snapshots": "node scripts/sync-snapshots.js"
@@ -20,6 +21,7 @@
     "ngrok": "^5.0.0-beta.2"
   },
   "devDependencies": {
+    "cross-env": "^10.1.0",
     "nodemon": "^3.0.1"
   }
 }

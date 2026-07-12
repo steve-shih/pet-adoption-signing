@@ -11,9 +11,23 @@ const Snapshot = require('./models/Snapshot');
 const User = require('./models/User');
 const LoginHistory = require('./models/LoginHistory');
 
+require('dotenv').config();
+
 const app = express();
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/pet-adoption';
+
+// 動態切換 MongoDB 連線字串
+let MONGODB_URI;
+if (process.env.NODE_ENV === 'production') {
+  // Kubernetes/正式環境直接讀取注入的變數
+  MONGODB_URI = process.env.MONGODB_URI;
+} else if (process.env.USE_ATLAS === 'true') {
+  MONGODB_URI = process.env.ATLAS_MONGODB_URI;
+  console.log('☁️  [環境切換] 將連線至雲端 MongoDB Atlas...');
+} else {
+  MONGODB_URI = process.env.LOCAL_MONGODB_URI || 'mongodb://127.0.0.1:27017/pet-adoption';
+  console.log('💻  [環境切換] 將連線至本機 Local MongoDB...');
+}
 
 // --------------------------------------------------------------------------
 // 🛠️ 1. 基礎配置與解析器 (優先級最高)
