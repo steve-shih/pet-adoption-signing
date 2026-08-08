@@ -208,7 +208,7 @@ const SNAPSHOTS_DIR = path.join(DATA_DIR, 'snapshots');
 app.get('/api/contracts', auth, async (req, res) => {
   try {
     if (isMongoReady) {
-      const query = { valid: true };
+      const query = {};
       // 管理員可以看到全部，一般用戶只能看到自己的
       if (req.user.role !== 'admin') {
         query.ownerId = req.user._id;
